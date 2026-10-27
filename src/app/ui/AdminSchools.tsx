@@ -16,10 +16,11 @@ type SheetEntry = {
 
 const now = new Date();
 const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+const COPIES_PER_QUETZAL = 4;
 const money = (amount: number) => `Q ${Number(amount || 0).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const formatAmount = (amount: number, unit: 'quetzales' | 'fotocopias') => unit === 'quetzales'
   ? money(amount)
-  : `${Number(amount || 0).toLocaleString('es-GT', { maximumFractionDigits: 2 })} fotocopias`;
+  : `${(Number(amount || 0) * COPIES_PER_QUETZAL).toLocaleString('es-GT', { maximumFractionDigits: 2 })} fotocopias`;
 const monthLabel = (value: string) => {
   const [year, month] = value.split('-').map(Number);
   return new Intl.DateTimeFormat('es-GT', { month: 'long', year: 'numeric' }).format(new Date(year, month - 1, 1));
@@ -150,6 +151,10 @@ export default function AdminSchools({
         setConsumptionError('Completa fecha, catedratico responsable y cantidad en cada fila utilizada.');
         return;
       }
+      if (formatUnit === 'fotocopias' && !Number.isInteger(row.monto)) {
+        setConsumptionError('La cantidad de fotocopias debe ser un numero entero.');
+        return;
+      }
     }
     setConsumptionBusy(true);
     setConsumptionError('');
@@ -158,7 +163,7 @@ export default function AdminSchools({
       fecha: row.fecha,
       catedratico: row.catedratico,
       descripcion: String(row.monto),
-      monto: row.monto,
+      monto: formatUnit === 'fotocopias' ? row.monto / COPIES_PER_QUETZAL : row.monto,
       recibido_conforme: false,
       recibido_por: null,
     })));
@@ -263,7 +268,7 @@ export default function AdminSchools({
           <div className="school-sheet-rule" />
           <div className="school-sheet-meta"><span>Seño: <b>{activeTeacher?.nombre || '________________________'}</b></span><span>Mes <b>{monthLabel(month)}</b></span><span>{new Date(`${month}-01T12:00:00`).getFullYear()}</span><b>{formatAmount(activeBalance, formatUnit)}</b></div>
           {consumptionError && <p className="sheet-entry-error no-print">{consumptionError}</p>}
-          <p className="sheet-entry-hint no-print">Escribe la cantidad consumida en Descripcion. Saldo Q se calcula automaticamente; guarda todas las filas con el boton Guardar formato.</p>
+          <p className="sheet-entry-hint no-print">{formatUnit === 'fotocopias' ? 'Cada fotocopia equivale a Q 0.25. El saldo se actualiza automaticamente.' : 'Escribe el consumo en quetzales. El saldo se actualiza automaticamente.'} Guarda todas las filas con el boton Guardar formato.</p>
           {sheetError && <p className="sheet-load-error">{sheetError}</p>}
           <form id="school-consumption-form" onSubmit={registerConsumption}>
           <table className="school-format-table">
@@ -276,8 +281,8 @@ export default function AdminSchools({
                 return <tr key={index} className={editable ? 'sheet-entry-row' : undefined}>
                   <td>{entry?.fecha ? new Intl.DateTimeFormat('es-GT').format(new Date(entry.fecha + 'T12:00:00')) : editable ? <input className="sheet-cell-input" type="date" name={`fecha-${index}`} aria-label="Fecha" disabled={consumptionBusy} /> : ''}</td>
                   <td>{entry?.catedratico || (editable ? <input className="sheet-cell-input" name={`catedratico-${index}`} aria-label="Catedratico responsable" disabled={consumptionBusy} placeholder="Escribe aqui" /> : '')}</td>
-                  <td>{entry?.descripcion || (editable ? <input className="sheet-cell-input" type="number" name={`monto-${index}`} min="0.01" step="0.01" aria-label="Cantidad consumida" disabled={consumptionBusy} placeholder="Cantidad Q" value={draftAmounts[index] || ''} onChange={(event) => setDraftAmounts((current) => ({ ...current, [index]: event.target.value }))} /> : '')}</td>
-                  <td>{entry ? formatAmount(entry.saldo, formatUnit) : editable && amountThroughRow ? formatAmount(activeBalance - amountThroughRow, formatUnit) : ''}</td>
+                  <td>{entry?.descripcion || (editable ? <input className="sheet-cell-input" type="number" name={`monto-${index}`} min="0.01" step={formatUnit === 'fotocopias' ? '1' : '0.01'} aria-label="Cantidad consumida" disabled={consumptionBusy} placeholder={formatUnit === 'fotocopias' ? 'Copias' : 'Cantidad Q'} value={draftAmounts[index] || ''} onChange={(event) => setDraftAmounts((current) => ({ ...current, [index]: event.target.value }))} /> : '')}</td>
+                  <td>{entry ? formatAmount(entry.saldo, formatUnit) : editable && amountThroughRow ? formatAmount(formatUnit === 'fotocopias' ? activeBalance - amountThroughRow / COPIES_PER_QUETZAL : activeBalance - amountThroughRow, formatUnit) : ''}</td>
                 </tr>;
               })}
             </tbody>
