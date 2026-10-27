@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 type School = { id: number; nombre: string };
 type Teacher = { id: number; nombre: string; escuela_id: number; tipo_formato?: 'quetzales' | 'fotocopias' };
 type Balance = { maestro_id: number; saldo: number };
+type MonthlyConsumption = { maestro_id: number; escuela_id: number; consumido: number };
 type SheetEntry = {
   fecha: string;
   catedratico: string | null;
@@ -46,7 +47,10 @@ export default function AdminSchools({
   const [teacherSuccess, setTeacherSuccess] = useState('');
   const [activeTeacher, setActiveTeacher] = useState<Teacher | null>(null);
   const [month, setMonth] = useState(currentMonth);
+  const [summaryMonth, setSummaryMonth] = useState(currentMonth);
   const [entries, setEntries] = useState<SheetEntry[]>([]);
+  const [monthlyConsumption, setMonthlyConsumption] = useState<MonthlyConsumption[]>([]);
+  const [summaryError, setSummaryError] = useState('');
   const [draftAmounts, setDraftAmounts] = useState<Record<number, string>>({});
   const [sheetError, setSheetError] = useState('');
   const [consumptionBusy, setConsumptionBusy] = useState(false);
@@ -60,6 +64,19 @@ export default function AdminSchools({
   const activeBalance = activeTeacher ? balances.find((balance) => balance.maestro_id === activeTeacher.id)?.saldo || 0 : 0;
   const formatUnit = activeTeacher?.tipo_formato || 'quetzales';
   const entryRowCount = Math.max(22, entries.length + 1);
+  const consumedRows = monthlyConsumption.filter((row) => Number(row.consumido) > 0);
+  const consumedQuetzales = consumedRows.filter((row) => teachers.find((teacher) => teacher.id === row.maestro_id)?.tipo_formato !== 'fotocopias').reduce((sum, row) => sum + Number(row.consumido || 0), 0);
+  const consumedCopiesQuetzales = consumedRows.filter((row) => teachers.find((teacher) => teacher.id === row.maestro_id)?.tipo_formato === 'fotocopias').reduce((sum, row) => sum + Number(row.consumido || 0), 0);
+  const schoolConsumption = Object.entries(consumedRows.reduce<Record<number, { quetzales: number; copiasQ: number; maestros: number }>>((totals, row) => {
+    const current = totals[row.escuela_id] || { quetzales: 0, copiasQ: 0, maestros: 0 };
+    const isCopies = teachers.find((teacher) => teacher.id === row.maestro_id)?.tipo_formato === 'fotocopias';
+    totals[row.escuela_id] = {
+      quetzales: current.quetzales + (isCopies ? 0 : Number(row.consumido || 0)),
+      copiasQ: current.copiasQ + (isCopies ? Number(row.consumido || 0) : 0),
+      maestros: current.maestros + 1,
+    };
+    return totals;
+  }, {})).sort((a, b) => (b[1].quetzales + b[1].copiasQ) - (a[1].quetzales + a[1].copiasQ));
 
   useEffect(() => {
     const element = dialog.current;
@@ -87,6 +104,20 @@ export default function AdminSchools({
       });
     return () => { cancelled = true; };
   }, [activeTeacher, month, sheetRefresh, supabase]);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase.from('saldo_mensual').select('maestro_id,escuela_id,consumido').eq('periodo', `${summaryMonth}-01`).then(({ data, error }) => {
+      if (cancelled) return;
+      if (error) {
+        setSummaryError('No se pudo cargar el resumen mensual de consumos.');
+        return;
+      }
+      setSummaryError('');
+      setMonthlyConsumption((data || []) as MonthlyConsumption[]);
+    });
+    return () => { cancelled = true; };
+  }, [summaryMonth, sheetRefresh, supabase]);
 
   async function addTeacher(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -191,6 +222,44 @@ export default function AdminSchools({
               <p>Selecciona una escuela para abrir sus formatos de fotocopias y administrar sus maestros.</p>
             </div>
             <div className="date-pill">{new Intl.DateTimeFormat('es-GT', { day: 'numeric', month: 'long', year: 'numeric' }).format(now)}</div>
+          </div>
+          <div className="stats">
+            <div className="stat-card">
+              <div className="stat-top"><span>Consumo en quetzales</span><span className="stat-icon green">Q</span></div>
+              <strong>{money(consumedQuetzales)}</strong>
+              <small>{monthLabel(summaryMonth)}</small>
+            </div>
+            <div className="stat-card">
+              <div className="stat-top"><span>Fotocopias consumidas</span><span className="stat-icon orange">▤</span></div>
+              <strong>{formatAmount(consumedCopiesQuetzales, 'fotocopias')}</strong>
+              <small>{monthLabel(summaryMonth)} · conversión de Q 0.25 por copia</small>
+            </div>
+            <div className="stat-card">
+              <div className="stat-top"><span>Maestros con consumo</span><span className="stat-icon blue">♙</span></div>
+              <strong>{consumedRows.length}</strong>
+              <small>En el mes seleccionado</small>
+            </div>
+          </div>
+          {summaryError && <div className="alert error">{summaryError}</div>}
+          <div className="section-head">
+            <div><h2>Consumo por escuela</h2><p>Totales separados según la unidad de cada formato · {monthLabel(summaryMonth)}</p></div>
+            <label className="report-filter">Mes<input type="month" value={summaryMonth} onChange={(event) => setSummaryMonth(event.target.value)} /></label>
+          </div>
+          <div className="table-card">
+            <table>
+              <thead><tr><th>ESCUELA</th><th>CONSUMO EN QUETZALES</th><th>FOTOCOPIAS CONSUMIDAS</th><th>MAESTROS CON CONSUMO</th></tr></thead>
+              <tbody>
+                {schoolConsumption.map(([id, totals]) => (
+                  <tr key={id}>
+                    <td>{schools.find((item) => item.id === Number(id))?.nombre || 'Escuela'}</td>
+                    <td>{money(totals.quetzales)}</td>
+                    <td>{formatAmount(totals.copiasQ, 'fotocopias')}</td>
+                    <td>{totals.maestros}</td>
+                  </tr>
+                ))}
+                {!schoolConsumption.length && <tr><td className="empty" colSpan={4}>No hay consumos registrados en {monthLabel(summaryMonth)}.</td></tr>}
+              </tbody>
+            </table>
           </div>
           <div className="school-grid">
             {schools.map((item) => {
