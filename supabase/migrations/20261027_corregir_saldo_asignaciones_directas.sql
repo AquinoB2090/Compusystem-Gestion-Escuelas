@@ -5,9 +5,9 @@ select
   m.escuela_id,
   m.id as maestro_id,
   m.nombre as maestro,
-  coalesce(a.asignado, 0)::numeric(12,2) as asignado,
-  coalesce(c.consumido, 0)::numeric(12,2) as consumido,
-  (coalesce(a.asignado, 0) - coalesce(c.consumido, 0))::numeric(12,2) as saldo
+  coalesce(a.asignado, 0)::numeric as asignado,
+  coalesce(c.consumido, 0)::numeric as consumido,
+  (coalesce(a.asignado, 0) - coalesce(c.consumido, 0))::numeric as saldo
 from public.maestros m
 left join (
   select maestro_id, sum(monto) as asignado
