@@ -121,7 +121,7 @@ left join (select maestro_id,sum(monto) asignado from public.asignaciones where 
 left join (select maestro_id,sum(monto) consumido from public.consumos where not anulado group by maestro_id) c on c.maestro_id=m.id
 where m.activo;
 create or replace view public.saldo_mensual with (security_invoker=true) as
-select m.id as maestro_id,m.nombre as maestro,e.nombre as escuela,x.mes,
+select m.id as maestro_id,m.nombre as maestro,e.nombre as escuela,m.escuela_id,x.mes,
  coalesce(a.asignado,0)::numeric(12,2) as asignado,coalesce(c.consumido,0)::numeric(12,2) as consumido,
  (coalesce(a.asignado,0)-coalesce(c.consumido,0))::numeric(12,2) as saldo
 from public.maestros m join public.escuelas e on e.id=m.escuela_id
@@ -164,7 +164,9 @@ returns void language plpgsql security definer set search_path=public as $$ begi
  if nullif(trim(p_motivo),'') is null then raise exception 'El motivo es obligatorio'; end if;
  if p_tipo='consumo' then update public.consumos set anulado=true,motivo_anulacion=trim(p_motivo) where id=p_id and not anulado;
  elsif p_tipo='asignacion' then update public.asignaciones set anulado=true,motivo_anulacion=trim(p_motivo) where id=p_id and not anulado;
- elsif p_tipo='cheque' then update public.cheques set anulado=true,motivo_anulacion=trim(p_motivo) where id=p_id and not anulado;
+ elsif p_tipo='cheque' then
+   if exists(select 1 from public.asignaciones where cheque_id=p_id and not anulado) then raise exception 'Anula primero las asignaciones activas de este cheque'; end if;
+   update public.cheques set anulado=true,motivo_anulacion=trim(p_motivo) where id=p_id and not anulado;
  else raise exception 'Tipo de movimiento inválido'; end if;
 end $$;
 revoke all on function public.registrar_cheque(bigint,text,text,numeric,date),public.asignar_fondos(bigint,bigint,date,numeric,text),public.registrar_consumo(bigint,date,text,text,numeric,boolean,text),public.anular_movimiento(text,bigint,text) from public;
