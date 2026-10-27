@@ -50,6 +50,10 @@ export default function AdminSchools({
 }) {
   const supabase = useMemo(() => createClient(), []);
   const [schoolId, setSchoolId] = useState<number | null>(null);
+  const [addingSchool, setAddingSchool] = useState(false);
+  const [schoolName, setSchoolName] = useState('');
+  const [schoolBusy, setSchoolBusy] = useState(false);
+  const [schoolError, setSchoolError] = useState('');
   const [addingTeacher, setAddingTeacher] = useState(false);
   const [teacherName, setTeacherName] = useState('');
   const [teacherBusy, setTeacherBusy] = useState(false);
@@ -152,6 +156,24 @@ export default function AdminSchools({
     setTeacherSuccess('Maestro agregado a la escuela.');
     await onRefresh();
     setTeacherBusy(false);
+  }
+
+  async function addSchool(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nombre = schoolName.trim();
+    if (!nombre) return;
+    setSchoolBusy(true);
+    setSchoolError('');
+    const { error } = await supabase.from('escuelas').insert({ nombre, activa: true });
+    if (error) {
+      setSchoolError('No se pudo agregar la escuela. Revisa el nombre y vuelve a intentarlo.');
+      setSchoolBusy(false);
+      return;
+    }
+    setSchoolName('');
+    setAddingSchool(false);
+    await onRefresh();
+    setSchoolBusy(false);
   }
 
   async function changeFormatUnit(unit: 'quetzales' | 'fotocopias') {
@@ -266,8 +288,20 @@ export default function AdminSchools({
               <h1>Escuelas</h1>
               <p>Selecciona una escuela para abrir sus formatos de fotocopias y administrar sus maestros.</p>
             </div>
-            <div className="date-pill">{new Intl.DateTimeFormat('es-GT', { day: 'numeric', month: 'long', year: 'numeric' }).format(now)}</div>
+            <div className="table-tools">
+              <div className="date-pill">{new Intl.DateTimeFormat('es-GT', { day: 'numeric', month: 'long', year: 'numeric' }).format(now)}</div>
+              <button className="button primary" type="button" onClick={() => { setAddingSchool((value) => !value); setSchoolError(''); }}>
+                {addingSchool ? 'Cancelar' : '+ Agregar escuela'}
+              </button>
+            </div>
           </div>
+          {addingSchool && (
+            <form className="teacher-add-form" onSubmit={addSchool}>
+              <label>Nombre de la escuela<input autoFocus required value={schoolName} onChange={(event) => setSchoolName(event.target.value)} placeholder="Escribe el nombre de la escuela" /></label>
+              <button className="button primary" disabled={schoolBusy}>{schoolBusy ? 'Guardando...' : 'Guardar escuela'}</button>
+              {schoolError && <div className="alert error teacher-add-error">{schoolError}</div>}
+            </form>
+          )}
           <div className="stats">
             <div className="stat-card">
               <div className="stat-top"><span>Consumo total equivalente en Q</span><span className="stat-icon green">Q</span></div>
