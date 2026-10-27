@@ -45,3 +45,5 @@ where not c.anulado;
 
 grant select on public.hoja_maestro_acumulada to authenticated;
 grant insert on public.asignaciones to authenticated;
+
+notify pgrst, 'reload schema';
