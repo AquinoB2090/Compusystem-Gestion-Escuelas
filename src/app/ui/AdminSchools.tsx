@@ -52,8 +52,11 @@ export default function AdminSchools({
   const [schoolId, setSchoolId] = useState<number | null>(null);
   const [addingSchool, setAddingSchool] = useState(false);
   const [schoolName, setSchoolName] = useState('');
+  const [directorName, setDirectorName] = useState('');
+  const [directorPassword, setDirectorPassword] = useState('');
   const [schoolBusy, setSchoolBusy] = useState(false);
   const [schoolError, setSchoolError] = useState('');
+  const [schoolSuccess, setSchoolSuccess] = useState('');
   const [addingTeacher, setAddingTeacher] = useState(false);
   const [teacherName, setTeacherName] = useState('');
   const [teacherBusy, setTeacherBusy] = useState(false);
@@ -161,17 +164,25 @@ export default function AdminSchools({
   async function addSchool(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nombre = schoolName.trim();
-    if (!nombre) return;
+    if (!nombre || !directorName.trim() || directorPassword.length < 8) return;
     setSchoolBusy(true);
     setSchoolError('');
-    const { error } = await supabase.from('escuelas').insert({ nombre, activa: true });
-    if (error) {
-      setSchoolError('No se pudo agregar la escuela. Revisa el nombre y vuelve a intentarlo.');
+    const response = await fetch('/api/escuelas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombre, director_nombre: directorName.trim(), password: directorPassword }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setSchoolError(result.error || 'No se pudo crear la escuela y la cuenta del director.');
       setSchoolBusy(false);
       return;
     }
     setSchoolName('');
+    setDirectorName('');
+    setDirectorPassword('');
     setAddingSchool(false);
+    setSchoolSuccess(`Escuela y cuenta de director creadas. El acceso será con la escuela y la contraseña que definiste.`);
     await onRefresh();
     setSchoolBusy(false);
   }
@@ -298,10 +309,13 @@ export default function AdminSchools({
           {addingSchool && (
             <form className="teacher-add-form" onSubmit={addSchool}>
               <label>Nombre de la escuela<input autoFocus required value={schoolName} onChange={(event) => setSchoolName(event.target.value)} placeholder="Escribe el nombre de la escuela" /></label>
-              <button className="button primary" disabled={schoolBusy}>{schoolBusy ? 'Guardando...' : 'Guardar escuela'}</button>
+              <label>Nombre del director<input required value={directorName} onChange={(event) => setDirectorName(event.target.value)} placeholder="Nombre completo" /></label>
+              <label>Contraseña del director<input type="password" autoComplete="new-password" minLength={8} required value={directorPassword} onChange={(event) => setDirectorPassword(event.target.value)} placeholder="Mínimo 8 caracteres" /></label>
+              <button className="button primary" disabled={schoolBusy}>{schoolBusy ? 'Creando escuela y usuario...' : 'Crear escuela y director'}</button>
               {schoolError && <div className="alert error teacher-add-error">{schoolError}</div>}
             </form>
           )}
+          {schoolSuccess && <div className="alert success">{schoolSuccess}<button onClick={() => setSchoolSuccess('')}>×</button></div>}
           <div className="stats">
             <div className="stat-card">
               <div className="stat-top"><span>Consumo total equivalente en Q</span><span className="stat-icon green">Q</span></div>
