@@ -156,7 +156,6 @@ export default function AdminSchools({
     const { error } = await supabase.from('consumos').insert(pending.map((row) => ({
       maestro_id: activeTeacher.id,
       fecha: row.fecha,
-      periodo: `${row.fecha.slice(0, 7)}-01`,
       catedratico: row.catedratico,
       descripcion: String(row.monto),
       monto: row.monto,
