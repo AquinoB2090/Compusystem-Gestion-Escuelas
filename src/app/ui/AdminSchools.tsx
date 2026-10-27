@@ -43,6 +43,7 @@ export default function AdminSchools({
   const [activeTeacher, setActiveTeacher] = useState<Teacher | null>(null);
   const [month, setMonth] = useState(currentMonth);
   const [entries, setEntries] = useState<SheetEntry[]>([]);
+  const [draftAmounts, setDraftAmounts] = useState<Record<number, string>>({});
   const [sheetError, setSheetError] = useState('');
   const [consumptionBusy, setConsumptionBusy] = useState(false);
   const [consumptionError, setConsumptionError] = useState('');
@@ -65,6 +66,7 @@ export default function AdminSchools({
     if (!activeTeacher) return;
     let cancelled = false;
     setEntries([]);
+    setDraftAmounts({});
     setSheetError('');
     supabase
       .from('hoja_maestro_acumulada')
@@ -108,34 +110,46 @@ export default function AdminSchools({
     if (!activeTeacher) return;
     const form = event.currentTarget;
     const values = new FormData(form);
-    const fecha = String(values.get('fecha') || '');
-    const monto = Number(values.get('monto'));
-    if (!fecha.startsWith(`${month}-`)) {
-      setConsumptionError('La fecha debe pertenecer al mes seleccionado en la hoja.');
+    const pending = Array.from({ length: entryRowCount - entries.length }, (_, offset) => entries.length + offset)
+      .map((index) => ({
+        fecha: String(values.get(`fecha-${index}`) || ''),
+        catedratico: String(values.get(`catedratico-${index}`) || '').trim(),
+        monto: Number(values.get(`monto-${index}`)),
+      }))
+      .filter((row) => row.fecha || row.catedratico || Number.isFinite(row.monto) && row.monto > 0);
+    if (!pending.length) {
+      setConsumptionError('Ingresa al menos un consumo antes de guardar el formato.');
       return;
     }
-    if (!Number.isFinite(monto) || monto <= 0) {
-      setConsumptionError('Ingresa un monto mayor que cero.');
-      return;
+    for (const row of pending) {
+      if (!row.fecha.startsWith(`${month}-`)) {
+        setConsumptionError('Cada fecha debe pertenecer al mes seleccionado en la hoja.');
+        return;
+      }
+      if (!row.catedratico || !Number.isFinite(row.monto) || row.monto <= 0) {
+        setConsumptionError('Completa fecha, catedratico responsable y cantidad en cada fila utilizada.');
+        return;
+      }
     }
     setConsumptionBusy(true);
     setConsumptionError('');
-    const { error } = await supabase.from('consumos').insert({
+    const { error } = await supabase.from('consumos').insert(pending.map((row) => ({
       maestro_id: activeTeacher.id,
-      fecha,
-      periodo: `${fecha.slice(0, 7)}-01`,
-      catedratico: String(values.get('catedratico') || '').trim(),
-      descripcion: String(monto),
-      monto,
+      fecha: row.fecha,
+      periodo: `${row.fecha.slice(0, 7)}-01`,
+      catedratico: row.catedratico,
+      descripcion: String(row.monto),
+      monto: row.monto,
       recibido_conforme: false,
       recibido_por: null,
-    });
+    })));
     if (error) {
       setConsumptionError('No se pudo registrar el consumo. Revisa los datos e inténtalo de nuevo.');
       setConsumptionBusy(false);
       return;
     }
     form.reset();
+    setDraftAmounts({});
     setConsumptionError('');
     setSheetRefresh((value) => value + 1);
     await onRefresh();
@@ -218,6 +232,7 @@ export default function AdminSchools({
               return <option value={value} key={value}>{monthLabel(value)}</option>;
             })}
           </select></label>
+          <button className="button primary" type="submit" form="school-consumption-form" disabled={consumptionBusy}>{consumptionBusy ? 'Guardando...' : 'Guardar formato'}</button>
           <button className="button primary" onClick={() => window.print()}>Imprimir formato</button>
         </div>
         <div className="print-sheet school-print-sheet">
@@ -226,25 +241,26 @@ export default function AdminSchools({
           <div className="school-sheet-rule" />
           <div className="school-sheet-meta"><span>Seño: <b>{activeTeacher?.nombre || '________________________'}</b></span><span>Mes <b>{monthLabel(month)}</b></span><span>{new Date(`${month}-01T12:00:00`).getFullYear()}</span><b>{money(activeBalance)}</b></div>
           {consumptionError && <p className="sheet-entry-error no-print">{consumptionError}</p>}
-          {activeTeacher && Array.from({ length: entryRowCount }, (_, index) => index >= entries.length ? <form key={index} id={'consumo-' + activeTeacher.id + '-' + month + '-' + index} onSubmit={registerConsumption} /> : null)}
-          <p className="sheet-entry-hint no-print">Escribe la cantidad consumida en Descripcion y guarda la fila; Saldo Q mostrara el saldo restante.</p>
+          <p className="sheet-entry-hint no-print">Escribe la cantidad consumida en Descripcion. Saldo Q se calcula automaticamente; guarda todas las filas con el boton Guardar formato.</p>
           {sheetError && <p className="sheet-load-error">{sheetError}</p>}
+          <form id="school-consumption-form" onSubmit={registerConsumption}>
           <table className="school-format-table">
             <thead><tr><th>Fecha</th><th>Catedr&aacute;tico Responsable</th><th>Descripci&oacute;n</th><th>Saldo Q</th></tr></thead>
             <tbody>
               {Array.from({ length: entryRowCount }, (_, index) => {
                 const entry = entries[index];
                 const editable = Boolean(activeTeacher) && index >= entries.length;
-                const formId = activeTeacher ? 'consumo-' + activeTeacher.id + '-' + month + '-' + index : '';
+                const amountThroughRow = Object.entries(draftAmounts).reduce((sum, [rowIndex, amount]) => Number(rowIndex) <= index ? sum + (Number(amount) || 0) : sum, 0);
                 return <tr key={index} className={editable ? 'sheet-entry-row' : undefined}>
-                  <td>{entry?.fecha ? new Intl.DateTimeFormat('es-GT').format(new Date(entry.fecha + 'T12:00:00')) : editable ? <input className="sheet-cell-input" form={formId} type="date" name="fecha" aria-label="Fecha" required disabled={consumptionBusy} /> : ''}</td>
-                  <td>{entry?.catedratico || (editable ? <input className="sheet-cell-input" form={formId} name="catedratico" aria-label="Catedratico responsable" required disabled={consumptionBusy} placeholder="Escribe aqui" /> : '')}</td>
-                  <td>{entry?.descripcion || (editable ? <div className="sheet-cell-amount"><input className="sheet-cell-input" form={formId} type="number" name="monto" min="0.01" step="0.01" aria-label="Cantidad consumida" required disabled={consumptionBusy} placeholder="Cantidad Q" /><button className="sheet-cell-save no-print" form={formId} type="submit" title="Guardar fila" aria-label="Guardar consumo" disabled={consumptionBusy}>&#10003;</button></div> : '')}</td>
-                  <td>{entry ? money(entry.saldo) : ''}</td>
+                  <td>{entry?.fecha ? new Intl.DateTimeFormat('es-GT').format(new Date(entry.fecha + 'T12:00:00')) : editable ? <input className="sheet-cell-input" type="date" name={`fecha-${index}`} aria-label="Fecha" disabled={consumptionBusy} /> : ''}</td>
+                  <td>{entry?.catedratico || (editable ? <input className="sheet-cell-input" name={`catedratico-${index}`} aria-label="Catedratico responsable" disabled={consumptionBusy} placeholder="Escribe aqui" /> : '')}</td>
+                  <td>{entry?.descripcion || (editable ? <input className="sheet-cell-input" type="number" name={`monto-${index}`} min="0.01" step="0.01" aria-label="Cantidad consumida" disabled={consumptionBusy} placeholder="Cantidad Q" value={draftAmounts[index] || ''} onChange={(event) => setDraftAmounts((current) => ({ ...current, [index]: event.target.value }))} /> : '')}</td>
+                  <td>{entry ? money(entry.saldo) : editable && amountThroughRow ? money(activeBalance - amountThroughRow) : ''}</td>
                 </tr>;
               })}
             </tbody>
           </table>
+          </form>
           <div className="school-sheet-footer">Venta y soporte técnico: Computadoras, cámaras de seguridad, biométrico, control de acceso electrónico, alarmas, red estructurada, desarrollo de software y aire acondicionado.</div>
         </div>
       </dialog>
