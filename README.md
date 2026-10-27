@@ -31,10 +31,10 @@ Aplicación web en español para registrar cheques, asignaciones mensuales y con
 
 ## Seguridad y datos
 
-Los directores reciben acceso de solo lectura a los datos de su escuela mediante políticas RLS en PostgreSQL. Para crear cuentas desde la pantalla admin, define `SUPABASE_SERVICE_ROLE_KEY` como variable de entorno del servidor (en Vercel, nunca como variable `NEXT_PUBLIC_`). El endpoint valida el rol admin, crea una contraseña temporal aleatoria y la muestra una sola vez; entrégasela al director de forma privada. Los errores se conservan como anulaciones con motivo en el esquema.
+Los directores reciben acceso de solo lectura a los datos de su escuela mediante políticas RLS en PostgreSQL. El acceso por apartado requiere `SUPABASE_SERVICE_ROLE_KEY` para mapear Compusystem a su cuenta admin y Directory a la cuenta de la escuela elegida. Define esa clave solo como variable de servidor (nunca con el prefijo `NEXT_PUBLIC_`). Para crear cuentas desde la pantalla admin, el endpoint valida el rol admin, crea una contraseña temporal aleatoria y la muestra una sola vez; entrégasela al director de forma privada. Los errores se conservan como anulaciones con motivo en el esquema.
 
 El archivo SQL mencionado en la guía que acompañó el formato no venía en la carpeta del proyecto, por lo que `supabase/base_de_datos.sql` implementa el esquema requerido por esta aplicación. Si ya desplegaste un esquema con nombres o columnas distintos, compara la migración antes de aplicarla.
 
 ## Despliegue
 
-Importa el repositorio en Vercel y define `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (o `NEXT_PUBLIC_SUPABASE_ANON_KEY`) y, si usarás el alta de directores desde la app, `SUPABASE_SERVICE_ROLE_KEY`. No publiques `.env.local`.
+Importa el repositorio en Vercel y define `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (o `NEXT_PUBLIC_SUPABASE_ANON_KEY`) y `SUPABASE_SERVICE_ROLE_KEY`. No publiques `.env.local`.

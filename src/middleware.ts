@@ -7,7 +7,8 @@ export async function middleware(request: NextRequest) {
     cookies: { getAll: () => request.cookies.getAll(), setAll(values: { name: string; value: string; options: CookieOptions }[]) { values.forEach(({ name, value }) => request.cookies.set(name, value)); response = NextResponse.next({ request }); values.forEach(({ name, value, options }) => response.cookies.set(name, value, options)); } },
   });
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user && !request.nextUrl.pathname.startsWith('/login')) return NextResponse.redirect(new URL('/login', request.url));
+  const publicRoute = request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname === '/api/login';
+  if (!user && !publicRoute) return NextResponse.redirect(new URL('/login', request.url));
   if (user && request.nextUrl.pathname === '/login') return NextResponse.redirect(new URL('/', request.url));
   return response;
 }
