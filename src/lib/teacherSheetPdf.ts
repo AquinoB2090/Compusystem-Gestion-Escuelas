@@ -65,7 +65,6 @@ export async function downloadTeacherSheetPdf({ teacherName, month, unit, balanc
   pdf.setFontSize(10);
   pdf.text(`Seño: ${teacherName}`, 12, 61);
   pdf.text(`Mes: ${monthName}`, pageWidth * 0.56, 61);
-  pdf.text(String(year), pageWidth - 42, 61);
   pdf.text(amountLabel(balance, unit), pageWidth - 12, 61, { align: 'right' });
 
   autoTable(pdf, {

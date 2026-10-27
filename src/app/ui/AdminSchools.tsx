@@ -357,7 +357,7 @@ export default function AdminSchools({
           <div className="school-sheet-branding"><Image src="/compusystem-logo.jpeg" alt="Logotipo de Compusystem" width={802} height={507} className="school-sheet-logo" /></div>
           <div className="school-sheet-contact"><b>Prop. Olga Marina Arrivillaga Aldana de Aquino</b><span>Barrio El Porvenir, Guastatoya, El Progreso</span><span>Tel. 7945-0482 · e-mail: compussystem@hotmail.com</span><span>NIT 48577030</span></div>
           <div className="school-sheet-rule" />
-          <div className="school-sheet-meta"><span>Seño: <b>{activeTeacher?.nombre || '________________________'}</b></span><span>Mes <b>{monthLabel(month)}</b></span><span>{new Date(`${month}-01T12:00:00`).getFullYear()}</span><b>{formatAmount(activeBalance, formatUnit)}</b></div>
+          <div className="school-sheet-meta"><span>Seño: <b>{activeTeacher?.nombre || '________________________'}</b></span><span>Mes <b>{monthLabel(month)}</b></span><b>{formatAmount(activeBalance, formatUnit)}</b></div>
           {consumptionError && <p className="sheet-entry-error no-print">{consumptionError}</p>}
           <p className="sheet-entry-hint no-print">{formatUnit === 'fotocopias' ? 'Cada fotocopia equivale a Q 0.25. El saldo se actualiza automaticamente.' : 'Escribe el consumo en quetzales. El saldo se actualiza automaticamente.'} Guarda todas las filas con el boton Guardar formato.</p>
           {sheetError && <p className="sheet-load-error">{sheetError}</p>}
