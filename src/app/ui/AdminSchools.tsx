@@ -44,6 +44,11 @@ export default function AdminSchools({
   const [month, setMonth] = useState(currentMonth);
   const [entries, setEntries] = useState<SheetEntry[]>([]);
   const [sheetError, setSheetError] = useState('');
+  const [addingConsumption, setAddingConsumption] = useState(false);
+  const [consumptionBusy, setConsumptionBusy] = useState(false);
+  const [consumptionError, setConsumptionError] = useState('');
+  const [consumptionNotice, setConsumptionNotice] = useState('');
+  const [sheetRefresh, setSheetRefresh] = useState(0);
   const dialog = useRef<HTMLDialogElement>(null);
 
   const school = schools.find((item) => item.id === schoolId) || null;
@@ -75,7 +80,7 @@ export default function AdminSchools({
         else setEntries((data || []) as SheetEntry[]);
       });
     return () => { cancelled = true; };
-  }, [activeTeacher, month, supabase]);
+  }, [activeTeacher, month, sheetRefresh, supabase]);
 
   async function addTeacher(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -98,6 +103,42 @@ export default function AdminSchools({
     setTeacherSuccess('Maestro agregado a la escuela.');
     await onRefresh();
     setTeacherBusy(false);
+  }
+
+  async function registerConsumption(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activeTeacher) return;
+    const form = event.currentTarget;
+    const values = new FormData(form);
+    const fecha = String(values.get('fecha') || '');
+    const monto = Number(values.get('monto'));
+    if (!Number.isFinite(monto) || monto <= 0) {
+      setConsumptionError('Ingresa un monto mayor que cero.');
+      return;
+    }
+    setConsumptionBusy(true);
+    setConsumptionError('');
+    setConsumptionNotice('');
+    const { error } = await supabase.from('consumos').insert({
+      maestro_id: activeTeacher.id,
+      fecha,
+      periodo: `${fecha.slice(0, 7)}-01`,
+      catedratico: String(values.get('catedratico') || '').trim(),
+      descripcion: String(values.get('descripcion') || '').trim(),
+      monto,
+      recibido_conforme: values.get('recibido_conforme') === 'on',
+      recibido_por: String(values.get('recibido_por') || '').trim() || null,
+    });
+    if (error) {
+      setConsumptionError('No se pudo registrar el consumo. Revisa los datos e inténtalo de nuevo.');
+      setConsumptionBusy(false);
+      return;
+    }
+    form.reset();
+    setConsumptionNotice('Consumo registrado; la hoja y el saldo se actualizaron.');
+    setSheetRefresh((value) => value + 1);
+    await onRefresh();
+    setConsumptionBusy(false);
   }
 
   return (
@@ -157,7 +198,7 @@ export default function AdminSchools({
                 <article className="teacher-sheet-card" key={teacher.id}>
                   <span className={`teacher-avatar tone-${index % 5}`}>{teacher.nombre.slice(0, 1)}</span>
                   <div className="teacher-sheet-info"><b>{teacher.nombre}</b><small>Saldo actual · {money(balance)}</small></div>
-                  <button className="button secondary small" onClick={() => { setActiveTeacher(teacher); setMonth(currentMonth); }}>Abrir formato</button>
+                  <button className="button secondary small" onClick={() => { setActiveTeacher(teacher); setMonth(currentMonth); setAddingConsumption(false); setConsumptionError(''); setConsumptionNotice(''); }}>Abrir formato</button>
                 </article>
               );
             })}
@@ -176,8 +217,23 @@ export default function AdminSchools({
               return <option value={value} key={value}>{monthLabel(value)}</option>;
             })}
           </select></label>
+          <button className="button secondary" onClick={() => { setAddingConsumption((value) => !value); setConsumptionError(''); }}>{addingConsumption ? 'Cerrar captura' : '+ Registrar consumo'}</button>
           <button className="button primary" onClick={() => window.print()}>Imprimir formato</button>
         </div>
+        {consumptionNotice && <div className="alert success no-print">{consumptionNotice}<button onClick={() => setConsumptionNotice('')}>×</button></div>}
+        {addingConsumption && <form className="sheet-consumption-form no-print" onSubmit={registerConsumption}>
+          <div className="form-heading"><span className="form-icon orange">＋</span><div><h2>Registrar consumo</h2><p>Se agregará a la hoja de {activeTeacher?.nombre}.</p></div></div>
+          <div className="sheet-consumption-grid">
+            <label>Fecha<input type="date" name="fecha" required defaultValue={new Date().toISOString().slice(0, 10)} /></label>
+            <label>Catedrático responsable<input name="catedratico" required placeholder="Nombre de quien solicita" /></label>
+            <label className="consumption-description">Descripción<input name="descripcion" required placeholder="Detalle de las fotocopias" /></label>
+            <label>Monto Q<input type="number" name="monto" min="0.01" step="0.01" required placeholder="0.00" /></label>
+            <label>Recibido por<input name="recibido_por" placeholder="Opcional" /></label>
+            <label className="check-row consumption-confirm"><input type="checkbox" name="recibido_conforme" /> Recibido conforme</label>
+          </div>
+          {consumptionError && <div className="alert error">{consumptionError}</div>}
+          <div className="form-actions"><button type="button" className="button secondary" onClick={() => setAddingConsumption(false)}>Cancelar</button><button className="button primary" disabled={consumptionBusy}>{consumptionBusy ? 'Guardando…' : 'Guardar consumo'}</button></div>
+        </form>}
         <div className="print-sheet school-print-sheet">
           <div className="school-sheet-branding"><Image src="/compusystem-logo.jpeg" alt="Logotipo de Compusystem" width={802} height={507} className="school-sheet-logo" /></div>
           <div className="school-sheet-contact"><b>Prop. Olga Marina Arrivillaga Aldana de Aquino</b><span>Barrio El Porvenir, Guastatoya, El Progreso</span><span>Tel. 7945-0482 · e-mail: compussystem@hotmail.com</span><span>NIT 48577030</span></div>
