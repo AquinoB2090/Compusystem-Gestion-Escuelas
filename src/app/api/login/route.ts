@@ -3,7 +3,7 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextRequest, NextResponse } from 'next/server';
 
 function serviceClient() {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!key) return null;
   return createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
@@ -11,7 +11,7 @@ function serviceClient() {
 export async function GET() {
   const admin = serviceClient();
   if (!admin) return NextResponse.json({ error: 'Falta configurar SUPABASE_SERVICE_ROLE_KEY en el servidor.' }, { status: 503 });
-  const { data, error } = await admin.from('escuelas').select('id,nombre').eq('activo', true).order('nombre');
+  const { data, error } = await admin.from('escuelas').select('id,nombre').eq('activa', true).order('nombre');
   if (error) return NextResponse.json({ error: 'No se pudieron cargar las escuelas.' }, { status: 500 });
   return NextResponse.json({ schools: data || [] });
 }
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
   const admin = serviceClient();
   if (!admin) return NextResponse.json({ error: 'El acceso requiere configurar SUPABASE_SERVICE_ROLE_KEY en el servidor.' }, { status: 503 });
 
-  let profiles = admin.from('perfiles').select('id').eq('rol', role);
+  let profiles = admin.from('perfiles').select('id').eq('rol', role).eq('activo', true);
   if (role === 'director') profiles = profiles.eq('escuela_id', schoolId) as typeof profiles;
   const { data: matches, error: profileError } = await profiles.limit(2);
   if (profileError) return NextResponse.json({ error: 'No se pudo identificar la cuenta. Verifica el esquema de perfiles.' }, { status: 500 });

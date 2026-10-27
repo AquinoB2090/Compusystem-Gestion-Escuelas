@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   if (!String(nombre || '').trim() || !String(email || '').trim() || !Number(escuela_id)) {
     return NextResponse.json({ error: 'Completa el nombre, correo y escuela.' }, { status: 400 });
   }
-  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const secret = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!secret) return NextResponse.json({ error: 'Falta configurar SUPABASE_SERVICE_ROLE_KEY en el servidor.' }, { status: 503 });
   const admin = createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, secret, { auth: { autoRefreshToken: false, persistSession: false } });
   const password = `${randomBytes(15).toString('base64url')}aA1!`;
