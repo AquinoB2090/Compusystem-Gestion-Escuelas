@@ -37,4 +37,24 @@ La base de datos ya desplegada usa `periodo`, `anulada`, `fecha_recepcion` y otr
 
 ## Despliegue
 
-Importa el repositorio en Vercel y define `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (o `NEXT_PUBLIC_SUPABASE_ANON_KEY`) y `SUPABASE_SECRET_KEY`. No publiques `.env.local`.
+### Vercel
+
+1. Importa el repositorio de GitHub en Vercel. Vercel detecta Next.js automáticamente; usa `npm run build` como comando de compilación.
+2. En **Project Settings → Environment Variables**, configura para Production (y Preview si usarás previews):
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+   - `SUPABASE_SECRET_KEY` (solo servidor; nunca debe llevar el prefijo `NEXT_PUBLIC_`)
+3. Vuelve a desplegar después de guardar las variables. Mantén `.env.local` fuera del repositorio.
+4. Antes de publicar, confirma en Supabase que las migraciones requeridas por la aplicación ya se ejecutaron. No ejecutes `supabase/base_de_datos.sql` sobre la base existente.
+5. En **Supabase → Authentication → URL Configuration**, agrega el dominio de producción de Vercel a los redirect URLs y establece el Site URL al dominio final cuando vayas a usar enlaces de autenticación.
+
+### Mantener actividad en Supabase Free
+
+El workflow `.github/workflows/supabase-keepalive.yml` hace una consulta de solo lectura tres veces al día y se puede ejecutar manualmente desde la pestaña **Actions**. Se programa varias veces al día porque Supabase indica que una actividad baja durante siete días puede pausar un proyecto Free y que, por lo general, hacen falta varias solicitudes diarias; una consulta semanal no ofrece esa frecuencia.
+
+En el repositorio de GitHub, configura:
+
+- En **Settings → Secrets and variables → Actions → Variables**, agrega `SUPABASE_URL` con la URL del proyecto.
+- En la pestaña **Secrets**, agrega `SUPABASE_SECRET_KEY` con la clave secreta del proyecto.
+
+La clave secreta se usa solo como encabezado de API para una consulta GET y no se imprime en los logs. El workflow necesita estar en la rama predeterminada y las GitHub Actions habilitadas. El cron de GitHub puede retrasarse; Supabase no garantiza que las solicitudes programadas eviten toda pausa por inactividad. Para garantizar que no se pause por inactividad, Supabase requiere un plan de pago.

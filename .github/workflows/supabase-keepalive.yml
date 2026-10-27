@@ -1,0 +1,32 @@
+name: Supabase keepalive
+
+on:
+  # Supabase Free may pause projects with low database activity over a 7-day window.
+  # Run a small read-only query a few times daily to keep recent activity consistent.
+  schedule:
+    - cron: '13 6,14,22 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  query-supabase:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+    steps:
+      - name: Check required settings
+        run: |
+          test -n "$SUPABASE_URL" || { echo "Configure the SUPABASE_URL repository variable." >&2; exit 1; }
+          test -n "$SUPABASE_SECRET_KEY" || { echo "Configure the SUPABASE_SECRET_KEY repository secret." >&2; exit 1; }
+
+      - name: Run read-only database query
+        run: |
+          curl --fail --silent --show-error --max-time 30 --output /dev/null \
+            --header "apikey: ${SUPABASE_SECRET_KEY}" \
+            --header "Accept: application/json" \
+            "${SUPABASE_URL%/}/rest/v1/escuelas?select=id&limit=1"
+          echo "Supabase database query completed."
