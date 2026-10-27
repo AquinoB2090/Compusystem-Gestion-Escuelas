@@ -44,6 +44,7 @@ La base de datos ya desplegada usa `periodo`, `anulada`, `fecha_recepcion` y otr
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
    - `SUPABASE_SECRET_KEY` (solo servidor; nunca debe llevar el prefijo `NEXT_PUBLIC_`)
+   Si usas la integración Quickstart de Supabase, la app también acepta `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY`; el build los expone como valores públicos de Next.js. La URL y la clave publishable/anon son públicas; nunca expongas `SUPABASE_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET` ni la contraseña de Postgres.
 3. Vuelve a desplegar después de guardar las variables. Mantén `.env.local` fuera del repositorio.
 4. Antes de publicar, confirma en Supabase que las migraciones requeridas por la aplicación ya se ejecutaron. No ejecutes `supabase/base_de_datos.sql` sobre la base existente.
 5. En **Supabase → Authentication → URL Configuration**, agrega el dominio de producción de Vercel a los redirect URLs y establece el Site URL al dominio final cuando vayas a usar enlaces de autenticación.
