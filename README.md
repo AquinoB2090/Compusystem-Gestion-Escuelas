@@ -5,7 +5,7 @@ Aplicación web en español para registrar cheques, asignaciones mensuales y con
 ## Configuración
 
 1. Instala Node.js 20 o posterior.
-2. Copia `.env.example` a `.env.local` y completa URL y clave anon del proyecto Supabase.
+2. Copia `.env.example` a `.env.local` y completa URL y clave publishable del proyecto Supabase (o usa `NEXT_PUBLIC_SUPABASE_ANON_KEY` si tu proyecto aún usa la clave anon).
 3. Ejecuta `npm install` y `npm run dev`.
 4. En un proyecto Supabase nuevo, ejecuta `supabase/base_de_datos.sql` desde SQL Editor.
 5. En Supabase Authentication, crea el usuario admin y desactiva el registro público. Añade su perfil desde SQL Editor, sustituyendo el UUID:
@@ -37,4 +37,4 @@ El archivo SQL mencionado en la guía que acompañó el formato no venía en la 
 
 ## Despliegue
 
-Importa el repositorio en Vercel y define `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` y, si usarás el alta de directores desde la app, `SUPABASE_SERVICE_ROLE_KEY`. No publiques `.env.local`.
+Importa el repositorio en Vercel y define `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (o `NEXT_PUBLIC_SUPABASE_ANON_KEY`) y, si usarás el alta de directores desde la app, `SUPABASE_SERVICE_ROLE_KEY`. No publiques `.env.local`.
