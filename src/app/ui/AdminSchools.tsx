@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
 
 type School = { id: number; nombre: string };
@@ -178,13 +179,13 @@ export default function AdminSchools({
           <button className="button primary" onClick={() => window.print()}>Imprimir formato</button>
         </div>
         <div className="print-sheet school-print-sheet">
-          <div className="sheet-brand"><b>Prop. Olga Marina Arrivillaga Aldana de Aquino</b><span>NIT 48577030</span></div>
-          <div className="sheet-address">Barrio El Porvenir, Guastatoya, El Progreso · Tel. 7945-0482 · e-mail: compussystem@hotmail.com</div>
+          <div className="school-sheet-branding"><Image src="/compusystem-logo.jpeg" alt="Logotipo de Compusystem" width={802} height={507} className="school-sheet-logo" /></div>
+          <div className="school-sheet-contact"><b>Prop. Olga Marina Arrivillaga Aldana de Aquino</b><span>Barrio El Porvenir, Guastatoya, El Progreso</span><span>Tel. 7945-0482 · e-mail: compussystem@hotmail.com</span><span>NIT 48577030</span></div>
           <div className="school-sheet-rule" />
           <div className="school-sheet-meta"><span>Seño: <b>{activeTeacher?.nombre || '________________________'}</b></span><span>Mes <b>{monthLabel(month)}</b></span><span>{new Date(`${month}-01T12:00:00`).getFullYear()}</span><b>{money(activeBalance)}</b></div>
           {sheetError && <p className="sheet-load-error">{sheetError}</p>}
           <table className="school-format-table">
-            <thead><tr><th>Fecha</th><th>Catedrático Responsable</th><th>Descripción</th><th>Saldo Q</th><th>Firma Recibí conforme</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Catedrático Responsable</th><th>Descripción</th><th>Saldo Q</th></tr></thead>
             <tbody>
               {Array.from({ length: Math.max(22, entries.length) }, (_, index) => {
                 const entry = entries[index];
@@ -193,7 +194,6 @@ export default function AdminSchools({
                   <td>{entry?.catedratico || ''}</td>
                   <td>{entry?.descripcion || ''}</td>
                   <td>{entry ? money(entry.saldo) : ''}</td>
-                  <td><span className="signature-space" /></td>
                 </tr>;
               })}
             </tbody>
