@@ -232,7 +232,7 @@ export default function AdminSchools({
             <div className="stat-card">
               <div className="stat-top"><span>Fotocopias consumidas</span><span className="stat-icon orange">▤</span></div>
               <strong>{formatAmount(consumedCopiesQuetzales, 'fotocopias')}</strong>
-              <small>{monthLabel(summaryMonth)} · conversión de Q 0.25 por copia</small>
+              <small>Equivalente: {money(consumedCopiesQuetzales)} · {monthLabel(summaryMonth)}</small>
             </div>
             <div className="stat-card">
               <div className="stat-top"><span>Maestros con consumo</span><span className="stat-icon blue">♙</span></div>
