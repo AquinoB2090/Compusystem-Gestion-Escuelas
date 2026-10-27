@@ -2,5 +2,6 @@ node_modules/
 .next/
 .env*
 !.env.example
+.credenciales-acceso.local.md
 out/
 *.tsbuildinfo
