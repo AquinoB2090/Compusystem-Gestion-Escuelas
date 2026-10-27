@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
 
 type School = { id: number; nombre: string };
-type Teacher = { id: number; nombre: string; escuela_id: number };
+type Teacher = { id: number; nombre: string; escuela_id: number; tipo_formato?: 'quetzales' | 'fotocopias' };
 type Balance = { maestro_id: number; saldo: number };
 type SheetEntry = {
   fecha: string;
@@ -17,6 +17,9 @@ type SheetEntry = {
 const now = new Date();
 const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 const money = (amount: number) => `Q ${Number(amount || 0).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const formatAmount = (amount: number, unit: 'quetzales' | 'fotocopias') => unit === 'quetzales'
+  ? money(amount)
+  : `${Number(amount || 0).toLocaleString('es-GT', { maximumFractionDigits: 2 })} fotocopias`;
 const monthLabel = (value: string) => {
   const [year, month] = value.split('-').map(Number);
   return new Intl.DateTimeFormat('es-GT', { month: 'long', year: 'numeric' }).format(new Date(year, month - 1, 1));
@@ -46,6 +49,7 @@ export default function AdminSchools({
   const [draftAmounts, setDraftAmounts] = useState<Record<number, string>>({});
   const [sheetError, setSheetError] = useState('');
   const [consumptionBusy, setConsumptionBusy] = useState(false);
+  const [unitBusy, setUnitBusy] = useState(false);
   const [consumptionError, setConsumptionError] = useState('');
   const [sheetRefresh, setSheetRefresh] = useState(0);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -53,6 +57,7 @@ export default function AdminSchools({
   const school = schools.find((item) => item.id === schoolId) || null;
   const schoolTeachers = teachers.filter((teacher) => teacher.escuela_id === schoolId);
   const activeBalance = activeTeacher ? balances.find((balance) => balance.maestro_id === activeTeacher.id)?.saldo || 0 : 0;
+  const formatUnit = activeTeacher?.tipo_formato || 'quetzales';
   const entryRowCount = Math.max(22, entries.length + 1);
 
   useEffect(() => {
@@ -103,6 +108,21 @@ export default function AdminSchools({
     setTeacherSuccess('Maestro agregado a la escuela.');
     await onRefresh();
     setTeacherBusy(false);
+  }
+
+  async function changeFormatUnit(unit: 'quetzales' | 'fotocopias') {
+    if (!activeTeacher || unit === formatUnit) return;
+    setUnitBusy(true);
+    setConsumptionError('');
+    const { error } = await supabase.from('maestros').update({ tipo_formato: unit }).eq('id', activeTeacher.id);
+    if (error) {
+      setConsumptionError('No se pudo guardar el tipo de formato. Ejecuta primero la migracion de unidades.');
+      setUnitBusy(false);
+      return;
+    }
+    setActiveTeacher({ ...activeTeacher, tipo_formato: unit });
+    await onRefresh();
+    setUnitBusy(false);
   }
 
   async function registerConsumption(event: React.FormEvent<HTMLFormElement>) {
@@ -171,12 +191,14 @@ export default function AdminSchools({
           <div className="school-grid">
             {schools.map((item) => {
               const count = teachers.filter((teacher) => teacher.escuela_id === item.id).length;
-              const total = balances.filter((balance) => teachers.some((teacher) => teacher.id === balance.maestro_id && teacher.escuela_id === item.id)).reduce((sum, balance) => sum + Number(balance.saldo || 0), 0);
+              const schoolBalances = balances.filter((balance) => teachers.some((teacher) => teacher.id === balance.maestro_id && teacher.escuela_id === item.id));
+              const totalQuetzales = schoolBalances.filter((balance) => teachers.find((teacher) => teacher.id === balance.maestro_id)?.tipo_formato !== 'fotocopias').reduce((sum, balance) => sum + Number(balance.saldo || 0), 0);
+              const totalCopies = schoolBalances.filter((balance) => teachers.find((teacher) => teacher.id === balance.maestro_id)?.tipo_formato === 'fotocopias').reduce((sum, balance) => sum + Number(balance.saldo || 0), 0);
               return (
                 <button className="school-card" key={item.id} onClick={() => { setSchoolId(item.id); setTeacherSuccess(''); }}>
                   <span className="school-card-icon">⌂</span>
                   <span className="school-card-content"><b>{item.nombre}</b><small>{count} {count === 1 ? 'maestro' : 'maestros'}</small></span>
-                  <span className="school-card-balance">{money(total)}</span>
+                  <span className="school-card-balance">{[totalQuetzales ? money(totalQuetzales) : '', totalCopies ? formatAmount(totalCopies, 'fotocopias') : ''].filter(Boolean).join(' · ') || money(0)}</span>
                   <span className="school-card-arrow">›</span>
                 </button>
               );
@@ -212,7 +234,7 @@ export default function AdminSchools({
               return (
                 <article className="teacher-sheet-card" key={teacher.id}>
                   <span className={`teacher-avatar tone-${index % 5}`}>{teacher.nombre.slice(0, 1)}</span>
-                  <div className="teacher-sheet-info"><b>{teacher.nombre}</b><small>Saldo actual · {money(balance)}</small></div>
+                  <div className="teacher-sheet-info"><b>{teacher.nombre}</b><small>Saldo actual · {formatAmount(balance, teacher.tipo_formato || 'quetzales')}</small></div>
                   <button className="button secondary small" onClick={() => { setActiveTeacher(teacher); setMonth(currentMonth); setConsumptionError(''); }}>Abrir formato</button>
                 </article>
               );
@@ -232,6 +254,7 @@ export default function AdminSchools({
               return <option value={value} key={value}>{monthLabel(value)}</option>;
             })}
           </select></label>
+          <label className="sheet-month">Tipo de formato<select aria-label="Tipo de formato" value={formatUnit} disabled={unitBusy} onChange={(event) => changeFormatUnit(event.target.value as 'quetzales' | 'fotocopias')}><option value="quetzales">Quetzales</option><option value="fotocopias">Fotocopias</option></select></label>
           <button className="button primary" type="submit" form="school-consumption-form" disabled={consumptionBusy}>{consumptionBusy ? 'Guardando...' : 'Guardar formato'}</button>
           <button className="button primary" onClick={() => window.print()}>Imprimir formato</button>
         </div>
@@ -239,13 +262,13 @@ export default function AdminSchools({
           <div className="school-sheet-branding"><Image src="/compusystem-logo.jpeg" alt="Logotipo de Compusystem" width={802} height={507} className="school-sheet-logo" /></div>
           <div className="school-sheet-contact"><b>Prop. Olga Marina Arrivillaga Aldana de Aquino</b><span>Barrio El Porvenir, Guastatoya, El Progreso</span><span>Tel. 7945-0482 · e-mail: compussystem@hotmail.com</span><span>NIT 48577030</span></div>
           <div className="school-sheet-rule" />
-          <div className="school-sheet-meta"><span>Seño: <b>{activeTeacher?.nombre || '________________________'}</b></span><span>Mes <b>{monthLabel(month)}</b></span><span>{new Date(`${month}-01T12:00:00`).getFullYear()}</span><b>{money(activeBalance)}</b></div>
+          <div className="school-sheet-meta"><span>Seño: <b>{activeTeacher?.nombre || '________________________'}</b></span><span>Mes <b>{monthLabel(month)}</b></span><span>{new Date(`${month}-01T12:00:00`).getFullYear()}</span><b>{formatAmount(activeBalance, formatUnit)}</b></div>
           {consumptionError && <p className="sheet-entry-error no-print">{consumptionError}</p>}
           <p className="sheet-entry-hint no-print">Escribe la cantidad consumida en Descripcion. Saldo Q se calcula automaticamente; guarda todas las filas con el boton Guardar formato.</p>
           {sheetError && <p className="sheet-load-error">{sheetError}</p>}
           <form id="school-consumption-form" onSubmit={registerConsumption}>
           <table className="school-format-table">
-            <thead><tr><th>Fecha</th><th>Catedr&aacute;tico Responsable</th><th>Descripci&oacute;n</th><th>Saldo Q</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Catedr&aacute;tico Responsable</th><th>Descripci&oacute;n</th><th>{formatUnit === 'quetzales' ? 'Saldo Q' : 'Saldo fotocopias'}</th></tr></thead>
             <tbody>
               {Array.from({ length: entryRowCount }, (_, index) => {
                 const entry = entries[index];
@@ -255,7 +278,7 @@ export default function AdminSchools({
                   <td>{entry?.fecha ? new Intl.DateTimeFormat('es-GT').format(new Date(entry.fecha + 'T12:00:00')) : editable ? <input className="sheet-cell-input" type="date" name={`fecha-${index}`} aria-label="Fecha" disabled={consumptionBusy} /> : ''}</td>
                   <td>{entry?.catedratico || (editable ? <input className="sheet-cell-input" name={`catedratico-${index}`} aria-label="Catedratico responsable" disabled={consumptionBusy} placeholder="Escribe aqui" /> : '')}</td>
                   <td>{entry?.descripcion || (editable ? <input className="sheet-cell-input" type="number" name={`monto-${index}`} min="0.01" step="0.01" aria-label="Cantidad consumida" disabled={consumptionBusy} placeholder="Cantidad Q" value={draftAmounts[index] || ''} onChange={(event) => setDraftAmounts((current) => ({ ...current, [index]: event.target.value }))} /> : '')}</td>
-                  <td>{entry ? money(entry.saldo) : editable && amountThroughRow ? money(activeBalance - amountThroughRow) : ''}</td>
+                  <td>{entry ? formatAmount(entry.saldo, formatUnit) : editable && amountThroughRow ? formatAmount(activeBalance - amountThroughRow, formatUnit) : ''}</td>
                 </tr>;
               })}
             </tbody>
