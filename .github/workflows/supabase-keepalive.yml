@@ -15,13 +15,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     env:
-      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      # Accept the usual Supabase URL variable name as well as the shorter alias.
+      SUPABASE_URL: ${{ vars.SUPABASE_URL || vars.NEXT_PUBLIC_SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
     steps:
       - name: Check required settings
         run: |
-          test -n "$SUPABASE_URL" || { echo "Configure the SUPABASE_URL repository variable." >&2; exit 1; }
-          test -n "$SUPABASE_SECRET_KEY" || { echo "Configure the SUPABASE_SECRET_KEY repository secret." >&2; exit 1; }
+          test -n "$SUPABASE_URL" || {
+            echo "Missing GitHub Actions variable: SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL)." >&2
+            exit 1
+          }
+          test -n "$SUPABASE_SECRET_KEY" || {
+            echo "Missing GitHub Actions secret: SUPABASE_SECRET_KEY." >&2
+            echo "Add it under Settings > Secrets and variables > Actions > Repository secrets." >&2
+            exit 1
+          }
 
       - name: Run read-only database query
         run: |
