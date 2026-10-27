@@ -125,7 +125,7 @@ export default function AdminSchools({
       fecha,
       periodo: `${fecha.slice(0, 7)}-01`,
       catedratico: String(values.get('catedratico') || '').trim(),
-      descripcion: String(values.get('descripcion') || '').trim(),
+      descripcion: String(monto),
       monto,
       recibido_conforme: false,
       recibido_por: null,
@@ -227,7 +227,7 @@ export default function AdminSchools({
           <div className="school-sheet-meta"><span>Seño: <b>{activeTeacher?.nombre || '________________________'}</b></span><span>Mes <b>{monthLabel(month)}</b></span><span>{new Date(`${month}-01T12:00:00`).getFullYear()}</span><b>{money(activeBalance)}</b></div>
           {consumptionError && <p className="sheet-entry-error no-print">{consumptionError}</p>}
           {activeTeacher && Array.from({ length: entryRowCount }, (_, index) => index >= entries.length ? <form key={index} id={'consumo-' + activeTeacher.id + '-' + month + '-' + index} onSubmit={registerConsumption} /> : null)}
-          <p className="sheet-entry-hint no-print">Escribe directamente en una fila vacia. En Saldo Q ingresa el monto a descontar; presiona Enter para guardar.</p>
+          <p className="sheet-entry-hint no-print">Escribe la cantidad consumida en Descripcion y guarda la fila; Saldo Q mostrara el saldo restante.</p>
           {sheetError && <p className="sheet-load-error">{sheetError}</p>}
           <table className="school-format-table">
             <thead><tr><th>Fecha</th><th>Catedr&aacute;tico Responsable</th><th>Descripci&oacute;n</th><th>Saldo Q</th></tr></thead>
@@ -239,8 +239,8 @@ export default function AdminSchools({
                 return <tr key={index} className={editable ? 'sheet-entry-row' : undefined}>
                   <td>{entry?.fecha ? new Intl.DateTimeFormat('es-GT').format(new Date(entry.fecha + 'T12:00:00')) : editable ? <input className="sheet-cell-input" form={formId} type="date" name="fecha" aria-label="Fecha" required disabled={consumptionBusy} /> : ''}</td>
                   <td>{entry?.catedratico || (editable ? <input className="sheet-cell-input" form={formId} name="catedratico" aria-label="Catedratico responsable" required disabled={consumptionBusy} placeholder="Escribe aqui" /> : '')}</td>
-                  <td>{entry?.descripcion || (editable ? <input className="sheet-cell-input" form={formId} name="descripcion" aria-label="Descripcion" required disabled={consumptionBusy} placeholder="Escribe aqui" /> : '')}</td>
-                  <td>{entry ? money(entry.saldo) : editable ? <div className="sheet-cell-amount"><input className="sheet-cell-input" form={formId} type="number" name="monto" min="0.01" step="0.01" aria-label="Monto del consumo" required disabled={consumptionBusy} placeholder="Monto Q" /><button className="sheet-cell-save no-print" form={formId} type="submit" title="Guardar fila" aria-label="Guardar consumo" disabled={consumptionBusy}>&#10003;</button></div> : ''}</td>
+                  <td>{entry?.descripcion || (editable ? <div className="sheet-cell-amount"><input className="sheet-cell-input" form={formId} type="number" name="monto" min="0.01" step="0.01" aria-label="Cantidad consumida" required disabled={consumptionBusy} placeholder="Cantidad Q" /><button className="sheet-cell-save no-print" form={formId} type="submit" title="Guardar fila" aria-label="Guardar consumo" disabled={consumptionBusy}>&#10003;</button></div> : '')}</td>
+                  <td>{entry ? money(entry.saldo) : ''}</td>
                 </tr>;
               })}
             </tbody>
