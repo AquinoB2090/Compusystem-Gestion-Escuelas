@@ -67,6 +67,7 @@ export default function AdminSchools({
   const consumedRows = monthlyConsumption.filter((row) => Number(row.consumido) > 0);
   const consumedQuetzales = consumedRows.filter((row) => teachers.find((teacher) => teacher.id === row.maestro_id)?.tipo_formato !== 'fotocopias').reduce((sum, row) => sum + Number(row.consumido || 0), 0);
   const consumedCopiesQuetzales = consumedRows.filter((row) => teachers.find((teacher) => teacher.id === row.maestro_id)?.tipo_formato === 'fotocopias').reduce((sum, row) => sum + Number(row.consumido || 0), 0);
+  const consumedTotalQuetzales = consumedQuetzales + consumedCopiesQuetzales;
   const schoolConsumption = Object.entries(consumedRows.reduce<Record<number, { quetzales: number; copiasQ: number; maestros: number }>>((totals, row) => {
     const current = totals[row.escuela_id] || { quetzales: 0, copiasQ: 0, maestros: 0 };
     const isCopies = teachers.find((teacher) => teacher.id === row.maestro_id)?.tipo_formato === 'fotocopias';
@@ -225,9 +226,9 @@ export default function AdminSchools({
           </div>
           <div className="stats">
             <div className="stat-card">
-              <div className="stat-top"><span>Consumo en quetzales</span><span className="stat-icon green">Q</span></div>
-              <strong>{money(consumedQuetzales)}</strong>
-              <small>{monthLabel(summaryMonth)}</small>
+              <div className="stat-top"><span>Consumo total equivalente en Q</span><span className="stat-icon green">Q</span></div>
+              <strong>{money(consumedTotalQuetzales)}</strong>
+              <small>Incluye fotocopias a Q 0.25 cada una · {monthLabel(summaryMonth)}</small>
             </div>
             <div className="stat-card">
               <div className="stat-top"><span>Fotocopias consumidas</span><span className="stat-icon orange">▤</span></div>
@@ -247,12 +248,12 @@ export default function AdminSchools({
           </div>
           <div className="table-card">
             <table>
-              <thead><tr><th>ESCUELA</th><th>CONSUMO EN QUETZALES</th><th>FOTOCOPIAS CONSUMIDAS</th><th>MAESTROS CON CONSUMO</th></tr></thead>
+              <thead><tr><th>ESCUELA</th><th>EQUIVALENTE TOTAL EN Q</th><th>FOTOCOPIAS CONSUMIDAS</th><th>MAESTROS CON CONSUMO</th></tr></thead>
               <tbody>
                 {schoolConsumption.map(([id, totals]) => (
                   <tr key={id}>
                     <td>{schools.find((item) => item.id === Number(id))?.nombre || 'Escuela'}</td>
-                    <td>{money(totals.quetzales)}</td>
+                    <td>{money(totals.quetzales + totals.copiasQ)}</td>
                     <td>{formatAmount(totals.copiasQ, 'fotocopias')}</td>
                     <td>{totals.maestros}</td>
                   </tr>
