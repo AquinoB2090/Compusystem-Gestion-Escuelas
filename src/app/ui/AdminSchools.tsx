@@ -164,7 +164,7 @@ export default function AdminSchools({
       recibido_por: null,
     })));
     if (error) {
-      setConsumptionError('No se pudo registrar el consumo. Revisa los datos e inténtalo de nuevo.');
+      setConsumptionError(`No se pudo guardar el formato: ${error.message}`);
       setConsumptionBusy(false);
       return;
     }
