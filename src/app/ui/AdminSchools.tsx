@@ -44,17 +44,15 @@ export default function AdminSchools({
   const [month, setMonth] = useState(currentMonth);
   const [entries, setEntries] = useState<SheetEntry[]>([]);
   const [sheetError, setSheetError] = useState('');
-  const [addingConsumption, setAddingConsumption] = useState(false);
   const [consumptionBusy, setConsumptionBusy] = useState(false);
   const [consumptionError, setConsumptionError] = useState('');
-  const [consumptionNotice, setConsumptionNotice] = useState('');
   const [sheetRefresh, setSheetRefresh] = useState(0);
   const dialog = useRef<HTMLDialogElement>(null);
 
   const school = schools.find((item) => item.id === schoolId) || null;
   const schoolTeachers = teachers.filter((teacher) => teacher.escuela_id === schoolId);
-  const schoolBalances = balances.filter((balance) => schoolTeachers.some((teacher) => teacher.id === balance.maestro_id));
   const activeBalance = activeTeacher ? balances.find((balance) => balance.maestro_id === activeTeacher.id)?.saldo || 0 : 0;
+  const entryRowCount = Math.max(22, entries.length + 1);
 
   useEffect(() => {
     const element = dialog.current;
@@ -112,13 +110,16 @@ export default function AdminSchools({
     const values = new FormData(form);
     const fecha = String(values.get('fecha') || '');
     const monto = Number(values.get('monto'));
+    if (!fecha.startsWith(`${month}-`)) {
+      setConsumptionError('La fecha debe pertenecer al mes seleccionado en la hoja.');
+      return;
+    }
     if (!Number.isFinite(monto) || monto <= 0) {
       setConsumptionError('Ingresa un monto mayor que cero.');
       return;
     }
     setConsumptionBusy(true);
     setConsumptionError('');
-    setConsumptionNotice('');
     const { error } = await supabase.from('consumos').insert({
       maestro_id: activeTeacher.id,
       fecha,
@@ -126,8 +127,8 @@ export default function AdminSchools({
       catedratico: String(values.get('catedratico') || '').trim(),
       descripcion: String(values.get('descripcion') || '').trim(),
       monto,
-      recibido_conforme: values.get('recibido_conforme') === 'on',
-      recibido_por: String(values.get('recibido_por') || '').trim() || null,
+      recibido_conforme: false,
+      recibido_por: null,
     });
     if (error) {
       setConsumptionError('No se pudo registrar el consumo. Revisa los datos e inténtalo de nuevo.');
@@ -135,7 +136,7 @@ export default function AdminSchools({
       return;
     }
     form.reset();
-    setConsumptionNotice('Consumo registrado; la hoja y el saldo se actualizaron.');
+    setConsumptionError('');
     setSheetRefresh((value) => value + 1);
     await onRefresh();
     setConsumptionBusy(false);
@@ -198,7 +199,7 @@ export default function AdminSchools({
                 <article className="teacher-sheet-card" key={teacher.id}>
                   <span className={`teacher-avatar tone-${index % 5}`}>{teacher.nombre.slice(0, 1)}</span>
                   <div className="teacher-sheet-info"><b>{teacher.nombre}</b><small>Saldo actual · {money(balance)}</small></div>
-                  <button className="button secondary small" onClick={() => { setActiveTeacher(teacher); setMonth(currentMonth); setAddingConsumption(false); setConsumptionError(''); setConsumptionNotice(''); }}>Abrir formato</button>
+                  <button className="button secondary small" onClick={() => { setActiveTeacher(teacher); setMonth(currentMonth); setConsumptionError(''); }}>Abrir formato</button>
                 </article>
               );
             })}
@@ -210,46 +211,36 @@ export default function AdminSchools({
       <dialog ref={dialog} className="sheet-dialog school-sheet-dialog" onClose={() => setActiveTeacher(null)}>
         <div className="sheet-toolbar">
           <button className="button secondary" onClick={() => setActiveTeacher(null)}>Cerrar</button>
-          <label className="sheet-month">Mes<select value={month} onChange={(event) => setMonth(event.target.value)}>
+          <label className="sheet-month">Mes<select value={month} onChange={(event) => { setMonth(event.target.value); setConsumptionError(''); }}>
             {Array.from({ length: 36 }, (_, index) => {
               const date = new Date(now.getFullYear(), now.getMonth() - index, 1);
               const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
               return <option value={value} key={value}>{monthLabel(value)}</option>;
             })}
           </select></label>
-          <button className="button secondary" onClick={() => { setAddingConsumption((value) => !value); setConsumptionError(''); }}>{addingConsumption ? 'Cerrar captura' : '+ Registrar consumo'}</button>
           <button className="button primary" onClick={() => window.print()}>Imprimir formato</button>
         </div>
-        {consumptionNotice && <div className="alert success no-print">{consumptionNotice}<button onClick={() => setConsumptionNotice('')}>×</button></div>}
-        {addingConsumption && <form className="sheet-consumption-form no-print" onSubmit={registerConsumption}>
-          <div className="form-heading"><span className="form-icon orange">＋</span><div><h2>Registrar consumo</h2><p>Se agregará a la hoja de {activeTeacher?.nombre}.</p></div></div>
-          <div className="sheet-consumption-grid">
-            <label>Fecha<input type="date" name="fecha" required defaultValue={new Date().toISOString().slice(0, 10)} /></label>
-            <label>Catedrático responsable<input name="catedratico" required placeholder="Nombre de quien solicita" /></label>
-            <label className="consumption-description">Descripción<input name="descripcion" required placeholder="Detalle de las fotocopias" /></label>
-            <label>Monto Q<input type="number" name="monto" min="0.01" step="0.01" required placeholder="0.00" /></label>
-            <label>Recibido por<input name="recibido_por" placeholder="Opcional" /></label>
-            <label className="check-row consumption-confirm"><input type="checkbox" name="recibido_conforme" /> Recibido conforme</label>
-          </div>
-          {consumptionError && <div className="alert error">{consumptionError}</div>}
-          <div className="form-actions"><button type="button" className="button secondary" onClick={() => setAddingConsumption(false)}>Cancelar</button><button className="button primary" disabled={consumptionBusy}>{consumptionBusy ? 'Guardando…' : 'Guardar consumo'}</button></div>
-        </form>}
         <div className="print-sheet school-print-sheet">
           <div className="school-sheet-branding"><Image src="/compusystem-logo.jpeg" alt="Logotipo de Compusystem" width={802} height={507} className="school-sheet-logo" /></div>
           <div className="school-sheet-contact"><b>Prop. Olga Marina Arrivillaga Aldana de Aquino</b><span>Barrio El Porvenir, Guastatoya, El Progreso</span><span>Tel. 7945-0482 · e-mail: compussystem@hotmail.com</span><span>NIT 48577030</span></div>
           <div className="school-sheet-rule" />
           <div className="school-sheet-meta"><span>Seño: <b>{activeTeacher?.nombre || '________________________'}</b></span><span>Mes <b>{monthLabel(month)}</b></span><span>{new Date(`${month}-01T12:00:00`).getFullYear()}</span><b>{money(activeBalance)}</b></div>
+          {consumptionError && <p className="sheet-entry-error no-print">{consumptionError}</p>}
+          {activeTeacher && Array.from({ length: entryRowCount }, (_, index) => index >= entries.length ? <form key={index} id={'consumo-' + activeTeacher.id + '-' + month + '-' + index} onSubmit={registerConsumption} /> : null)}
+          <p className="sheet-entry-hint no-print">Escribe directamente en una fila vacia. En Saldo Q ingresa el monto a descontar; presiona Enter para guardar.</p>
           {sheetError && <p className="sheet-load-error">{sheetError}</p>}
           <table className="school-format-table">
-            <thead><tr><th>Fecha</th><th>Catedrático Responsable</th><th>Descripción</th><th>Saldo Q</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Catedr&aacute;tico Responsable</th><th>Descripci&oacute;n</th><th>Saldo Q</th></tr></thead>
             <tbody>
-              {Array.from({ length: Math.max(22, entries.length) }, (_, index) => {
+              {Array.from({ length: entryRowCount }, (_, index) => {
                 const entry = entries[index];
-                return <tr key={index}>
-                  <td>{entry?.fecha ? new Intl.DateTimeFormat('es-GT').format(new Date(`${entry.fecha}T12:00:00`)) : ''}</td>
-                  <td>{entry?.catedratico || ''}</td>
-                  <td>{entry?.descripcion || ''}</td>
-                  <td>{entry ? money(entry.saldo) : ''}</td>
+                const editable = Boolean(activeTeacher) && index >= entries.length;
+                const formId = activeTeacher ? 'consumo-' + activeTeacher.id + '-' + month + '-' + index : '';
+                return <tr key={index} className={editable ? 'sheet-entry-row' : undefined}>
+                  <td>{entry?.fecha ? new Intl.DateTimeFormat('es-GT').format(new Date(entry.fecha + 'T12:00:00')) : editable ? <input className="sheet-cell-input" form={formId} type="date" name="fecha" aria-label="Fecha" required disabled={consumptionBusy} /> : ''}</td>
+                  <td>{entry?.catedratico || (editable ? <input className="sheet-cell-input" form={formId} name="catedratico" aria-label="Catedratico responsable" required disabled={consumptionBusy} placeholder="Escribe aqui" /> : '')}</td>
+                  <td>{entry?.descripcion || (editable ? <input className="sheet-cell-input" form={formId} name="descripcion" aria-label="Descripcion" required disabled={consumptionBusy} placeholder="Escribe aqui" /> : '')}</td>
+                  <td>{entry ? money(entry.saldo) : editable ? <div className="sheet-cell-amount"><input className="sheet-cell-input" form={formId} type="number" name="monto" min="0.01" step="0.01" aria-label="Monto del consumo" required disabled={consumptionBusy} placeholder="Monto Q" /><button className="sheet-cell-save no-print" form={formId} type="submit" title="Guardar fila" aria-label="Guardar consumo" disabled={consumptionBusy}>&#10003;</button></div> : ''}</td>
                 </tr>;
               })}
             </tbody>
