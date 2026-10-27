@@ -219,12 +219,19 @@ export default function AdminSchools({
     setPdfBusy(true);
     setSheetError('');
     try {
+      const { data, error } = await supabase
+        .from('hoja_maestro_acumulada')
+        .select('fecha,catedratico,descripcion,saldo')
+        .eq('maestro_id', activeTeacher.id)
+        .eq('periodo', `${month}-01`)
+        .order('fecha');
+      if (error) throw error;
       await downloadTeacherSheetPdf({
         teacherName: activeTeacher.nombre,
         month,
         unit: formatUnit,
         balance: activeBalance,
-        entries,
+        entries: (data || []) as SheetEntry[],
       });
     } catch {
       setSheetError('No se pudo descargar el PDF. Inténtalo de nuevo.');
