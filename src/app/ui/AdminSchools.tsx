@@ -18,6 +18,15 @@ type SheetEntry = {
 
 const now = new Date();
 const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+const localDateISO = () => {
+  const date = new Date();
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 10);
+};
+const defaultEntryDate = (month: string) => {
+  const today = localDateISO();
+  return today.startsWith(`${month}-`) ? today : `${month}-01`;
+};
 const COPIES_PER_QUETZAL = 4;
 const money = (amount: number) => `Q ${Number(amount || 0).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const formatAmount = (amount: number, unit: 'quetzales' | 'fotocopias') => unit === 'quetzales'
@@ -165,13 +174,20 @@ export default function AdminSchools({
     if (!activeTeacher) return;
     const form = event.currentTarget;
     const values = new FormData(form);
+    const today = defaultEntryDate(month);
     const pending = Array.from({ length: entryRowCount - entries.length }, (_, offset) => entries.length + offset)
-      .map((index) => ({
-        fecha: String(values.get(`fecha-${index}`) || ''),
-        catedratico: String(values.get(`catedratico-${index}`) || '').trim(),
-        monto: Number(values.get(`monto-${index}`)),
-      }))
-      .filter((row) => row.fecha || row.catedratico || Number.isFinite(row.monto) && row.monto > 0);
+      .map((index) => {
+        const fecha = String(values.get(`fecha-${index}`) || '');
+        const catedratico = String(values.get(`catedratico-${index}`) || '').trim();
+        const monto = Number(values.get(`monto-${index}`));
+        return {
+          fecha,
+          catedratico,
+          monto,
+          automaticDefaults: index === entries.length && fecha === today && catedratico === activeTeacher.nombre && !(monto > 0),
+        };
+      })
+      .filter((row) => !row.automaticDefaults && (row.fecha || row.catedratico || Number.isFinite(row.monto) && row.monto > 0));
     if (!pending.length) {
       setConsumptionError('Ingresa al menos un consumo antes de guardar el formato.');
       return;
@@ -377,8 +393,8 @@ export default function AdminSchools({
                 const editable = Boolean(activeTeacher) && index >= entries.length;
                 const amountThroughRow = Object.entries(draftAmounts).reduce((sum, [rowIndex, amount]) => Number(rowIndex) <= index ? sum + (Number(amount) || 0) : sum, 0);
                 return <tr key={index} className={editable ? 'sheet-entry-row' : undefined}>
-                  <td>{entry?.fecha ? new Intl.DateTimeFormat('es-GT').format(new Date(entry.fecha + 'T12:00:00')) : editable ? <input className="sheet-cell-input" type="date" name={`fecha-${index}`} aria-label="Fecha" disabled={consumptionBusy} /> : ''}</td>
-                  <td>{entry?.catedratico || (editable ? <input className="sheet-cell-input" name={`catedratico-${index}`} aria-label="Catedratico responsable" disabled={consumptionBusy} placeholder="Escribe aqui" /> : '')}</td>
+                  <td>{entry?.fecha ? new Intl.DateTimeFormat('es-GT').format(new Date(entry.fecha + 'T12:00:00')) : editable ? <input className="sheet-cell-input" type="date" name={`fecha-${index}`} aria-label="Fecha" defaultValue={index === entries.length ? defaultEntryDate(month) : undefined} disabled={consumptionBusy} /> : ''}</td>
+                  <td>{entry?.catedratico || (editable ? <input className="sheet-cell-input" name={`catedratico-${index}`} aria-label="Catedratico responsable" defaultValue={index === entries.length ? activeTeacher?.nombre || '' : ''} disabled={consumptionBusy} placeholder="Escribe aqui" /> : '')}</td>
                   <td>{entry?.descripcion || (editable ? <input className="sheet-cell-input" type="number" name={`monto-${index}`} min={formatUnit === 'fotocopias' ? '1' : '0.01'} step={formatUnit === 'fotocopias' ? '1' : '0.01'} aria-label="Cantidad consumida" disabled={consumptionBusy} placeholder={formatUnit === 'fotocopias' ? 'Copias' : 'Cantidad Q'} value={draftAmounts[index] || ''} onChange={(event) => setDraftAmounts((current) => ({ ...current, [index]: event.target.value }))} /> : '')}</td>
                   <td>{entry ? formatAmount(entry.saldo, formatUnit) : editable && amountThroughRow ? formatAmount(formatUnit === 'fotocopias' ? activeBalance - amountThroughRow / COPIES_PER_QUETZAL : activeBalance - amountThroughRow, formatUnit) : ''}</td>
                 </tr>;
