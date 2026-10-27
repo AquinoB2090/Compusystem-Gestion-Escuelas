@@ -67,7 +67,7 @@ export default function AdminSchools({
     setEntries([]);
     setSheetError('');
     supabase
-      .from('hoja_maestro')
+      .from('hoja_maestro_acumulada')
       .select('fecha,catedratico,descripcion,saldo')
       .eq('maestro_id', activeTeacher.id)
       .eq('periodo', `${month}-01`)
