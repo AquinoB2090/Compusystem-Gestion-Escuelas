@@ -2,7 +2,9 @@
   "name": "saldos-fotocopias",
   "version": "1.0.0",
   "private": true,
-  "engines": {"node": ">=22"},
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -13,6 +15,8 @@
     "@supabase/server": "^1.9.2",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "2.118.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.9",
     "next": "^15.2.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

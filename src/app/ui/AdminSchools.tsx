@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
+import { downloadTeacherSheetPdf } from '@/lib/teacherSheetPdf';
 
 type School = { id: number; nombre: string };
 type Teacher = { id: number; nombre: string; escuela_id: number; tipo_formato?: 'quetzales' | 'fotocopias' };
@@ -54,6 +55,7 @@ export default function AdminSchools({
   const [draftAmounts, setDraftAmounts] = useState<Record<number, string>>({});
   const [sheetError, setSheetError] = useState('');
   const [consumptionBusy, setConsumptionBusy] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [unitBusy, setUnitBusy] = useState(false);
   const [consumptionError, setConsumptionError] = useState('');
   const [sheetRefresh, setSheetRefresh] = useState(0);
@@ -212,6 +214,25 @@ export default function AdminSchools({
     setConsumptionBusy(false);
   }
 
+  async function downloadFormatPdf() {
+    if (!activeTeacher) return;
+    setPdfBusy(true);
+    setSheetError('');
+    try {
+      await downloadTeacherSheetPdf({
+        teacherName: activeTeacher.nombre,
+        month,
+        unit: formatUnit,
+        balance: activeBalance,
+        entries,
+      });
+    } catch {
+      setSheetError('No se pudo descargar el PDF. Inténtalo de nuevo.');
+    } finally {
+      setPdfBusy(false);
+    }
+  }
+
   return (
     <>
       {!school ? (
@@ -330,7 +351,7 @@ export default function AdminSchools({
           </select></label>
           <label className="sheet-month">Tipo de formato<select aria-label="Tipo de formato" value={formatUnit} disabled={unitBusy} onChange={(event) => changeFormatUnit(event.target.value as 'quetzales' | 'fotocopias')}><option value="quetzales">Quetzales</option><option value="fotocopias">Fotocopias</option></select></label>
           <button className="button primary" type="submit" form="school-consumption-form" disabled={consumptionBusy}>{consumptionBusy ? 'Guardando...' : 'Guardar formato'}</button>
-          <button className="button primary" onClick={() => window.print()}>Imprimir formato</button>
+          <button className="button primary" type="button" onClick={downloadFormatPdf} disabled={pdfBusy}>{pdfBusy ? 'Preparando PDF...' : 'Descargar PDF'}</button>
         </div>
         <div className="print-sheet school-print-sheet">
           <div className="school-sheet-branding"><Image src="/compusystem-logo.jpeg" alt="Logotipo de Compusystem" width={802} height={507} className="school-sheet-logo" /></div>
