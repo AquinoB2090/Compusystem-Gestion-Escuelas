@@ -35,3 +35,44 @@
 }
 
 .movement-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+
+/* Paleta de marca: Rich Black, Metallic Seaweed, Green Sheen, Opal y Champagne. */
+:root{--ink:#031926;--muted:#468189;--line:#9dbebb;--green:#468189;--green-dark:#031926;--green-pale:#9dbebb;--bg:#f4e9cd;--white:#fff;--orange:#77aca2;--blue:#468189;--palette-dark:#031926;--palette-teal:#468189;--palette-seaglass:#77aca2;--palette-opal:#9dbebb;--palette-champagne:#f4e9cd}
+body{background:var(--bg);color:var(--ink)}
+.sidebar{background:var(--palette-dark);border-color:var(--palette-teal);color:var(--palette-champagne)}
+.sidebar .logo,.sidebar .nav-item,.sidebar .user-info b{color:var(--palette-champagne)}
+.sidebar .logo small,.sidebar .nav-label,.sidebar .user-info small,.sidebar .logout{color:var(--palette-opal)}
+.sidebar .nav-item.active{background:var(--palette-teal);color:#fff}
+.sidebar .help-card{background:#123642;color:var(--palette-champagne)}
+.sidebar .help-card p{color:var(--palette-opal)}
+.sidebar .help-icon{background:var(--palette-seaglass);color:var(--palette-dark)}
+.sidebar .user-card{border-color:var(--palette-teal)}
+.main,.login-shell{background:var(--bg)}
+.topbar,.stat-card,.table-card,.form-card,.center .card,.date-pill,.search,.login-option,.school-card,.teacher-add-form,.teacher-sheet-card{background:#fff}
+.welcome p,.section-head p,.form-heading p,.school-detail-head p{color:#468189}
+.stat-top,.date-pill,.search,.edit-select,.report-filter,.sheet-month{color:#468189}
+.green,.blue{background:var(--palette-opal);color:var(--palette-dark)}
+.orange{background:var(--palette-champagne);color:var(--palette-dark)}
+.button.primary{background:var(--palette-teal);color:#fff}
+.button.primary:hover{background:var(--palette-dark)}
+.button.secondary{background:var(--palette-opal);color:var(--palette-dark)}
+th{background:#f4e9cd;color:var(--palette-dark)}
+td{border-color:#9dbebb;color:#34545a}
+tbody tr[data-teacher]:hover{background:#f4e9cd}
+.teacher-cell,.teacher-sheet-info b{color:var(--palette-dark)}
+.tone-0,.tone-1,.tone-2,.tone-3,.tone-4{background:var(--palette-opal);color:var(--palette-dark)}
+.balance-chip{background:var(--palette-seaglass);color:var(--palette-dark)}
+.form-icon,.school-card-icon{background:var(--palette-opal);color:var(--palette-dark)}
+.data-form input:focus,.data-form select:focus,.login-form input:focus,.teacher-add-form input:focus{border-color:var(--palette-teal);box-shadow:0 0 0 3px #46818924}
+.data-form .check-row input{accent-color:var(--palette-teal)}
+.login-art{background:var(--palette-dark)}
+.brand-mark{background:var(--palette-champagne);color:var(--palette-dark)}
+.login-art .eyebrow,.art-note{color:var(--palette-opal)}
+.login-art>p{color:var(--palette-champagne)}
+.mobile-brand,.wave,.date-pill span,.back-link,.sheet-brand b{color:var(--palette-teal)}
+.admin-mark,.director-mark{background:var(--palette-opal);color:var(--palette-dark)}
+.login-option:hover,.school-card:hover{border-color:var(--palette-teal)}
+.school-card-balance{color:var(--palette-teal)}
+.school-sheet-rule{background:var(--palette-teal)}
+.sheet-toolbar{background:var(--palette-champagne)}
+.edit-select select,.report-filter select,.report-filter input,.sheet-month select,.login-form select{border-color:var(--palette-opal)}
