@@ -8,6 +8,7 @@ type TeacherSheetPdfOptions = {
   balance: number;
   entries: Array<{
     fecha: string;
+    tipo: string;
     catedratico: string | null;
     descripcion: string;
     importe: number;
@@ -76,7 +77,9 @@ export async function downloadTeacherSheetPdf({ teacherName, month, unit, balanc
       ? entries.map((entry) => [
         dateLabel(entry.fecha),
         entry.catedratico || '',
-        entry.unidad === 'quetzales' ? money(entry.importe) : `${Number(entry.descripcion || 0).toLocaleString('es-GT')} fotocopias`,
+        entry.tipo === 'ajuste'
+          ? amountLabel(entry.importe, 'fotocopias')
+          : entry.unidad === 'quetzales' ? money(entry.importe) : `${Number(entry.descripcion || 0).toLocaleString('es-GT')} fotocopias`,
         amountLabel(entry.saldo, 'fotocopias'),
       ])
       : [['', '', 'No hay consumos registrados para este mes.', '']],
