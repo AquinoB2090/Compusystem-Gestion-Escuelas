@@ -16,8 +16,8 @@ jobs:
     timeout-minutes: 2
     env:
       # Accept the usual Supabase URL variable name as well as the shorter alias.
-      SUPABASE_URL: ${{ vars.SUPABASE_URL || vars.NEXT_PUBLIC_SUPABASE_URL }}
-      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL || vars.NEXT_PUBLIC_SUPABASE_URL || secrets.SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
       - name: Check required settings
         run: |
@@ -33,7 +33,7 @@ jobs:
 
       - name: Run read-only database query
         run: |
-          curl --fail --silent --show-error --max-time 30 --output /dev/null \
+          curl --fail-with-body --silent --show-error --max-time 30 \
             --header "apikey: ${SUPABASE_SECRET_KEY}" \
             --header "Accept: application/json" \
             "${SUPABASE_URL%/}/rest/v1/escuelas?select=id&limit=1"
