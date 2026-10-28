@@ -12,9 +12,11 @@ export async function PATCH(request: Request) {
   const body = await request.json().catch(() => null);
   const tipo = body?.tipo;
   const id = Number(body?.id);
-  const copias = Number(body?.copias);
-  if (!['consumo', 'asignacion'].includes(tipo) || !Number.isInteger(id) || id < 1 || !Number.isInteger(copias) || copias < 1) {
-    return NextResponse.json({ error: 'Revisa el movimiento y escribe una cantidad entera de fotocopias.' }, { status: 400 });
+  const cantidad = Number(body?.cantidad ?? body?.copias);
+  const unidad = body?.unidad === 'quetzales' ? 'quetzales' : 'fotocopias';
+  const validAmount = Number.isFinite(cantidad) && cantidad > 0 && (unidad === 'quetzales' || Number.isInteger(cantidad));
+  if (!['consumo', 'asignacion'].includes(tipo) || !Number.isInteger(id) || id < 1 || !validAmount) {
+    return NextResponse.json({ error: 'Revisa el movimiento y la cantidad ingresada.' }, { status: 400 });
   }
 
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -22,11 +24,11 @@ export async function PATCH(request: Request) {
   if (!url || !key) return NextResponse.json({ error: 'Falta configurar la clave secreta de Supabase en el servidor.' }, { status: 503 });
   const admin = createSupabaseClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
   const table = tipo === 'consumo' ? 'consumos' : 'asignaciones';
-  const values = tipo === 'consumo'
-    ? { fecha: String(body?.fecha || ''), catedratico: String(body?.catedratico || '').trim(), descripcion: String(copias), monto: copias / 4 }
-    : { monto: copias / 4, unidad_ingresada: 'fotocopias' };
-  if (tipo === 'consumo' && (!values.fecha || !values.catedratico || !/^\d{4}-\d{2}-\d{2}$/.test(values.fecha))) {
-    return NextResponse.json({ error: 'Completa una fecha válida y el nombre del catedrático.' }, { status: 400 });
+  const values: Record<string, string | number> = tipo === 'consumo'
+    ? { fecha: String(body?.fecha || ''), catedratico: String(body?.descripcion || body?.catedratico || '').trim(), descripcion: String(cantidad), monto: unidad === 'fotocopias' ? cantidad / 4 : cantidad, unidad }
+    : { monto: cantidad / 4, unidad_ingresada: 'fotocopias' };
+  if (tipo === 'consumo' && (!String(values.fecha || '') || !String(values.catedratico || '') || !/^\d{4}-\d{2}-\d{2}$/.test(String(values.fecha || '')))) {
+    return NextResponse.json({ error: 'Completa una fecha válida y una descripción.' }, { status: 400 });
   }
   const { error } = await admin.from(table).update(values).eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });

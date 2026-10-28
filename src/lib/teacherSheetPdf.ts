@@ -10,7 +10,9 @@ type TeacherSheetPdfOptions = {
     fecha: string;
     catedratico: string | null;
     descripcion: string;
+    importe: number;
     saldo: number;
+    unidad: 'fotocopias' | 'quetzales';
   }>;
 };
 
@@ -69,14 +71,19 @@ export async function downloadTeacherSheetPdf({ teacherName, month, unit, balanc
 
   autoTable(pdf, {
     startY: 67,
-    head: [['Fecha', 'Catedrático Responsable', 'Descripción', unit === 'quetzales' ? 'Saldo Q' : 'Saldo fotocopias']],
+    head: [['Fecha', 'Descripción', 'Cantidad', 'Saldo fotocopias']],
     body: entries.length
-      ? entries.map((entry) => [dateLabel(entry.fecha), entry.catedratico || '', entry.descripcion, amountLabel(entry.saldo, unit)])
+      ? entries.map((entry) => [
+        dateLabel(entry.fecha),
+        entry.catedratico || '',
+        entry.unidad === 'quetzales' ? money(entry.importe) : `${Number(entry.descripcion || 0).toLocaleString('es-GT')} fotocopias`,
+        amountLabel(entry.saldo, 'fotocopias'),
+      ])
       : [['', '', 'No hay consumos registrados para este mes.', '']],
     theme: 'grid',
     styles: { font: 'times', fontSize: 9, textColor: [25, 25, 25], lineColor: [68, 68, 68], lineWidth: 0.2, cellPadding: 2.2 },
     headStyles: { fontStyle: 'bold', fillColor: [255, 255, 255], textColor: [25, 25, 25] },
-    columnStyles: { 0: { cellWidth: 27 }, 1: { cellWidth: 70 }, 2: { cellWidth: 'auto' }, 3: { cellWidth: 36, halign: 'right' } },
+    columnStyles: { 0: { cellWidth: 27 }, 1: { cellWidth: 'auto' }, 2: { cellWidth: 43, halign: 'right' }, 3: { cellWidth: 36, halign: 'right' } },
     margin: { left: 12, right: 12, bottom: 18 },
     didDrawPage: () => {
       const pageHeight = pdf.internal.pageSize.getHeight();
