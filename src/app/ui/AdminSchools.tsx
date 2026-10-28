@@ -261,6 +261,9 @@ export default function AdminSchools({
     event.preventDefault();
     if (!activeTeacher) return;
     const form = event.currentTarget;
+    for (let attempt = 0; attempt < 300 && savingRows.current.size; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
+    }
     const values = new FormData(form);
     const today = defaultEntryDate(month);
     const pending = Array.from({ length: entryRowCount - entries.length }, (_, offset) => entries.length + offset)
