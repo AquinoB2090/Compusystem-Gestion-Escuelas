@@ -22,7 +22,6 @@ export async function POST(request: Request) {
   const nombre = String(body?.nombre || '').trim();
   const directorNombre = String(body?.director_nombre || '').trim();
   const password = typeof body?.password === 'string' ? body.password : '';
-  const codigo = String(body?.codigo || '').trim();
   if (!nombre || !directorNombre || password.length < 8) {
     return NextResponse.json({ error: 'Completa el nombre de la escuela, el nombre del director y una contraseña de al menos 8 caracteres.' }, { status: 400 });
   }
@@ -30,8 +29,7 @@ export async function POST(request: Request) {
   const admin = serviceClient();
   if (!admin) return NextResponse.json({ error: 'Falta configurar SUPABASE_SECRET_KEY en el servidor.' }, { status: 503 });
 
-  const schoolValues: { nombre: string; activa: boolean; codigo?: string } = { nombre, activa: true };
-  if (codigo) schoolValues.codigo = codigo;
+  const schoolValues = { nombre, activa: true };
   const { data: school, error: schoolError } = await admin.from('escuelas').insert(schoolValues).select('id,nombre').single();
   if (schoolError || !school) return NextResponse.json({ error: schoolError?.message || 'No se pudo crear la escuela.' }, { status: 400 });
 

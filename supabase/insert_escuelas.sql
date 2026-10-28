@@ -1,16 +1,18 @@
--- Inserta o actualiza las nueve escuelas en public.escuelas.
--- Se puede ejecutar más de una vez: codigo es la clave única.
-insert into public.escuelas (nombre, codigo, activa)
-values
-  ('Escuela intercultural', 'INTERCULTURAL', true),
-  ('Escuela Palo Amontonado', 'PALO-AMONTONADO', true),
-  ('Escuela El Naranjo', 'EL-NARANJO', true),
-  ('Escuela Santa Lucia Pre Primaria', 'SANTA-LUCIA-PRE-PRIMARIA', true),
-  ('Escuela Sanra Lucia Primaria', 'SANRA-LUCIA-PRIMARIA', true),
-  ('Escuela Casas Viejas', 'CASAS-VIEJAS', true),
-  ('Escuela Tierra Blanca', 'TIERRA-BLANCA', true),
-  ('Escuela Federal', 'FEDERAL', true),
-  ('Escuela Santa Rita', 'SANTA-RITA', true)
-on conflict (codigo) do update
-set nombre = excluded.nombre,
-    activa = excluded.activa;
+-- Inserta las nueve escuelas sin duplicar nombres ya existentes.
+insert into public.escuelas (nombre, activa)
+select escuelas.nombre, true
+from (values
+  ('Escuela intercultural'),
+  ('Escuela Palo Amontonado'),
+  ('Escuela El Naranjo'),
+  ('Escuela Santa Lucia Pre Primaria'),
+  ('Escuela Sanra Lucia Primaria'),
+  ('Escuela Casas Viejas'),
+  ('Escuela Tierra Blanca'),
+  ('Escuela Federal'),
+  ('Escuela Santa Rita')
+) as escuelas(nombre)
+where not exists (
+  select 1 from public.escuelas existente
+  where lower(trim(existente.nombre)) = lower(trim(escuelas.nombre))
+);
