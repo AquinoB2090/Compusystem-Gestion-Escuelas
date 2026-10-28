@@ -9,7 +9,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "usuarios:normalizar": "node --env-file=.env.local scripts/normalizar-usuarios.mjs"
   },
   "dependencies": {
     "@supabase/server": "^1.9.2",
