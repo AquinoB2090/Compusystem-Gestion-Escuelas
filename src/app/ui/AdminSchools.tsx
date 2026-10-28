@@ -125,7 +125,7 @@ export default function AdminSchools({
 
   useEffect(() => {
     let cancelled = false;
-    supabase.from('saldo_mensual').select('maestro_id,escuela_id,consumido').eq('periodo', `${summaryMonth}-01`).then(({ data, error }) => {
+    supabase.from('saldo_mensual').select('maestro_id,escuela_id,consumido').eq('mes', `${summaryMonth}-01`).then(({ data, error }) => {
       if (cancelled) return;
       if (error) {
         setSummaryError('No se pudo cargar el resumen mensual de consumos.');
