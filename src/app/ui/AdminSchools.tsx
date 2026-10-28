@@ -10,6 +10,7 @@ type Teacher = { id: number; nombre: string; escuela_id: number; tipo_formato?: 
 type Balance = { maestro_id: number; saldo: number };
 type MonthlyConsumption = { maestro_id: number; escuela_id: number; fecha: string; monto: number; descripcion: string; unidad: 'fotocopias' | 'quetzales' };
 type SheetEntry = {
+  id?: number;
   tipo: string;
   fecha: string;
   catedratico: string | null;
@@ -63,6 +64,7 @@ export default function AdminSchools({
   const [schoolSuccess, setSchoolSuccess] = useState('');
   const [addingTeacher, setAddingTeacher] = useState(false);
   const [teacherSearch, setTeacherSearch] = useState('');
+  const [globalTeacherSearch, setGlobalTeacherSearch] = useState('');
   const [teacherName, setTeacherName] = useState('');
   const [teacherBusy, setTeacherBusy] = useState(false);
   const [teacherError, setTeacherError] = useState('');
@@ -77,6 +79,9 @@ export default function AdminSchools({
   const [draftUnits, setDraftUnits] = useState<Record<number, 'fotocopias' | 'quetzales'>>({});
   const [sheetError, setSheetError] = useState('');
   const [consumptionBusy, setConsumptionBusy] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState('');
+  const autosavedRows = useRef(new Map<number, number>());
+  const savingRows = useRef(new Set<number>());
   const [pdfBusy, setPdfBusy] = useState(false);
   const [consumptionError, setConsumptionError] = useState('');
   const [sheetRefresh, setSheetRefresh] = useState(0);
@@ -115,17 +120,23 @@ export default function AdminSchools({
     setDraftAmounts({});
     setDraftUnits({});
     setSheetError('');
-    supabase
-      .from('hoja_maestro_acumulada')
-      .select('fecha,tipo,catedratico,descripcion,importe,saldo,unidad')
-      .eq('maestro_id', activeTeacher.id)
-      .eq('periodo', `${month}-01`)
-      .order('fecha')
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) setSheetError('No se pudo cargar la hoja de este maestro.');
-        else setEntries((data || []) as SheetEntry[]);
-      });
+    autosavedRows.current.clear();
+    setAutoSaveStatus('');
+    Promise.all([
+      supabase.from('hoja_maestro_acumulada').select('fecha,tipo,catedratico,descripcion,importe,saldo,unidad').eq('maestro_id', activeTeacher.id).eq('periodo', `${month}-01`).order('fecha'),
+      supabase.from('consumos').select('id,fecha,catedratico,descripcion,monto,unidad').eq('maestro_id', activeTeacher.id).eq('periodo', `${month}-01`).eq('anulado', false),
+    ]).then(([sheet, consumptions]) => {
+      if (cancelled) return;
+      if (sheet.error || consumptions.error) { setSheetError('No se pudo cargar la hoja de este maestro.'); return; }
+      const byKey = new Map<string, any[]>();
+      for (const row of consumptions.data || []) { const key = `${row.fecha}|${row.catedratico}|${row.descripcion}|${Number(row.monto)}`; byKey.set(key, [...(byKey.get(key)||[]), row]); }
+      setEntries((sheet.data || []).map((row: any) => {
+        if (row.tipo !== 'consumo') return row as SheetEntry;
+        const key = `${row.fecha}|${row.catedratico}|${row.descripcion}|${Number(row.importe)}`;
+        const match = byKey.get(key)?.shift();
+        return { ...row, id: match?.id } as SheetEntry;
+      }));
+    });
     return () => { cancelled = true; };
   }, [activeTeacher, month, sheetRefresh, supabase]);
 
@@ -222,6 +233,30 @@ export default function AdminSchools({
     await onRefresh();
   }
 
+  async function autosaveRow(index: number, form: HTMLFormElement | null) {
+    if (!activeTeacher || !form || savingRows.current.has(index)) return;
+    const values = new FormData(form);
+    const fecha = String(values.get(`fecha-${index}`) || '');
+    const descripcion = String(values.get(`descripcion-${index}`) || '').trim();
+    const monto = Number(values.get(`monto-${index}`));
+    const unidad = String(values.get(`unidad-${index}`) || 'fotocopias') as 'fotocopias'|'quetzales';
+    if (!fecha || !descripcion || !Number.isFinite(monto) || monto <= 0) return;
+    if (!fecha.startsWith(`${month}-`) || (unidad === 'fotocopias' && !Number.isInteger(monto))) return;
+    savingRows.current.add(index); setAutoSaveStatus('Guardando automáticamente…');
+    const id = autosavedRows.current.get(index);
+    let error: any = null;
+    if (id) {
+      const response = await fetch('/api/movimientos', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo:'consumo', id, cantidad:monto, unidad, fecha, descripcion }) });
+      const result = await response.json().catch(()=>({})); if (!response.ok) error = new Error(result.error || 'No se pudo guardar la fila.');
+    } else {
+      const result = await supabase.from('consumos').insert({ maestro_id:activeTeacher.id, fecha, catedratico:descripcion, descripcion:String(monto), monto:unidad==='fotocopias'?monto/COPIES_PER_QUETZAL:monto, unidad, recibido_conforme:false, recibido_por:null }).select('id').single();
+      error = result.error; if (result.data?.id) autosavedRows.current.set(index, Number(result.data.id));
+    }
+    savingRows.current.delete(index);
+    if (error) { setAutoSaveStatus(`No se guardó automáticamente: ${error.message}`); return; }
+    setAutoSaveStatus('Cambios guardados automáticamente.');
+  }
+
   async function registerConsumption(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!activeTeacher) return;
@@ -230,6 +265,7 @@ export default function AdminSchools({
     const today = defaultEntryDate(month);
     const pending = Array.from({ length: entryRowCount - entries.length }, (_, offset) => entries.length + offset)
       .map((index) => {
+        if (autosavedRows.current.has(index)) return null;
         const fecha = String(values.get(`fecha-${index}`) || '');
         const descripcion = String(values.get(`descripcion-${index}`) || '').trim();
         const monto = Number(values.get(`monto-${index}`));
@@ -242,8 +278,9 @@ export default function AdminSchools({
           automaticDefaults: index === entries.length && fecha === today && !descripcion && !(monto > 0),
         };
       })
-      .filter((row) => !row.automaticDefaults && (row.fecha || row.descripcion || Number.isFinite(row.monto) && row.monto > 0));
+      .filter((row): row is NonNullable<typeof row> => Boolean(row) && !row.automaticDefaults && (row.fecha || row.descripcion || Number.isFinite(row.monto) && row.monto > 0));
     if (!pending.length) {
+      if (autosavedRows.current.size) { autosavedRows.current.clear(); setAutoSaveStatus('Todos los cambios están guardados.'); setSheetRefresh(value=>value+1); await onRefresh(); return; }
       setConsumptionError('Ingresa al menos un consumo antes de guardar el formato.');
       return;
     }
@@ -281,10 +318,27 @@ export default function AdminSchools({
     form.reset();
     setDraftAmounts({});
     setDraftUnits({});
+    autosavedRows.current.clear();
+    setAutoSaveStatus('');
     setConsumptionError('');
     setSheetRefresh((value) => value + 1);
     await onRefresh();
     setConsumptionBusy(false);
+  }
+
+  async function editFormatEntry(entry: SheetEntry) {
+    if (!entry.id) return;
+    const unit = entry.unidad === 'quetzales' ? 'quetzales' : 'fotocopias';
+    const quantity = unit === 'fotocopias' ? Number(entry.descripcion) : Number(entry.importe);
+    const nextQuantity = window.prompt(unit === 'fotocopias' ? 'Cantidad de fotocopias:' : 'Cantidad en quetzales:', String(quantity));
+    if (nextQuantity === null) return;
+    const amount = Number(nextQuantity);
+    if (!Number.isFinite(amount) || amount <= 0 || (unit === 'fotocopias' && !Number.isInteger(amount))) { setSheetError('La cantidad no es válida.'); return; }
+    const nextDate = window.prompt('Fecha (AAAA-MM-DD):', entry.fecha); if (!nextDate) return;
+    const nextDescription = window.prompt('Descripción:', entry.catedratico || ''); if (!nextDescription?.trim()) return;
+    const response = await fetch('/api/movimientos', {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:'consumo',id:entry.id,cantidad:amount,unidad,fecha:nextDate,descripcion:nextDescription.trim()})});
+    const result = await response.json().catch(()=>({})); if (!response.ok) { setSheetError(result.error || 'No se pudo editar la fila.'); return; }
+    setSheetRefresh(value=>value+1); await onRefresh();
   }
 
   async function downloadFormatPdf() {
@@ -330,6 +384,7 @@ export default function AdminSchools({
               </button>}
             </div>
           </div>
+          {dashboardSection === 'escuelas' && <section className="global-teacher-search"><div className="section-head"><div><h2>Buscar maestro en todas las escuelas</h2><p>Busca por nombre sin abrir primero una escuela.</p></div></div><label className="search"><span>⌕</span><input aria-label="Buscar maestro en todas las escuelas" placeholder="Nombre del maestro..." value={globalTeacherSearch} onChange={event => setGlobalTeacherSearch(event.target.value)} /></label>{globalTeacherSearch.trim() && <div className="teacher-sheet-grid">{teachers.filter(t=>t.activo!==false&&t.nombre.toLocaleLowerCase().includes(globalTeacherSearch.trim().toLocaleLowerCase())).slice(0,12).map((teacher,index)=><article className="teacher-sheet-card" key={teacher.id}><span className={`teacher-avatar tone-${index%5}`}>{teacher.nombre.slice(0,1)}</span><div className="teacher-sheet-info"><b>{teacher.nombre}</b><small>{schools.find(s=>s.id===teacher.escuela_id)?.nombre||'Escuela'}</small></div><button className="button secondary small" onClick={()=>{setSchoolId(teacher.escuela_id);setActiveTeacher(teacher);setMonth(currentMonth);}}>Abrir formato</button></article>)}{!teachers.some(t=>t.activo!==false&&t.nombre.toLocaleLowerCase().includes(globalTeacherSearch.trim().toLocaleLowerCase()))&&<div className="empty school-empty">No se encontraron maestros.</div>}</div>}</section>}
           <div className="dashboard-tabs"><button className={`button ${dashboardSection === 'resumen' ? 'primary' : 'secondary'}`} onClick={() => setDashboardSection('resumen')}>Resumen</button><button className={`button ${dashboardSection === 'escuelas' ? 'primary' : 'secondary'}`} onClick={() => setDashboardSection('escuelas')}>Escuelas</button></div>
           {dashboardSection === 'escuelas' && <>
           {addingSchool && (
@@ -458,6 +513,7 @@ export default function AdminSchools({
           <div className="school-sheet-rule" />
           <div className="school-sheet-meta"><span>Seño: <b>{activeTeacher?.nombre || '________________________'}</b></span><span>Mes <b>{monthLabel(month)}</b></span><b>{formatAmount(activeBalance, formatUnit)}</b></div>
           {consumptionError && <p className="sheet-entry-error no-print">{consumptionError}</p>}
+          {autoSaveStatus && <p className="sheet-entry-hint no-print">{autoSaveStatus}</p>}
           <p className="sheet-entry-hint no-print">En cada fila elige si la cantidad corresponde a fotocopias o quetzales. El saldo se calcula en fotocopias. Guarda todas las filas con el botón Guardar formato.</p>
           {sheetError && <p className="sheet-load-error">{sheetError}</p>}
           <form id="school-consumption-form" onSubmit={registerConsumption}>
@@ -469,9 +525,9 @@ export default function AdminSchools({
                 const editable = Boolean(activeTeacher) && index >= entries.length;
                 const amountThroughRow = Object.entries(draftAmounts).reduce((sum, [rowIndex, amount]) => Number(rowIndex) <= index ? sum + ((Number(amount) || 0) / (draftUnits[Number(rowIndex)] === 'quetzales' ? 1 : COPIES_PER_QUETZAL)) : sum, 0);
                 return <tr key={index} className={editable ? 'sheet-entry-row' : undefined}>
-                  <td>{entry?.fecha ? new Intl.DateTimeFormat('es-GT').format(new Date(entry.fecha + 'T12:00:00')) : editable ? <input className="sheet-cell-input" type="date" name={`fecha-${index}`} aria-label="Fecha" defaultValue={index === entries.length ? defaultEntryDate(month) : undefined} disabled={consumptionBusy} /> : ''}</td>
-                  <td>{entry?.catedratico || (editable ? <input className="sheet-cell-input" name={`descripcion-${index}`} aria-label="Descripción del consumo" disabled={consumptionBusy} placeholder="Describe el consumo" /> : '')}</td>
-                    <td>{entry ? entry.tipo === 'ajuste' ? formatAmount(entry.importe, formatUnit) : entry.unidad === 'quetzales' ? money(entry.importe) : `${Number(entry.descripcion || 0).toLocaleString('es-GT')} fotocopias` : editable ? <div className="sheet-cell-amount"><input className="sheet-cell-input" type="number" name={`monto-${index}`} min={draftUnits[index] === 'quetzales' ? '0.01' : '1'} step={draftUnits[index] === 'quetzales' ? '0.01' : '1'} aria-label="Cantidad consumida" disabled={consumptionBusy} placeholder="Cantidad" value={draftAmounts[index] || ''} onChange={(event) => setDraftAmounts((current) => ({ ...current, [index]: event.target.value }))} /><select className="sheet-unit-select" name={`unidad-${index}`} aria-label="Unidad del consumo" disabled={consumptionBusy} value={draftUnits[index] || 'fotocopias'} onChange={(event) => setDraftUnits((current) => ({ ...current, [index]: event.target.value as 'fotocopias' | 'quetzales' }))}><option value="fotocopias">Copias</option><option value="quetzales">Quetzales</option></select></div> : ''}</td>
+                  <td>{entry?.fecha ? new Intl.DateTimeFormat('es-GT').format(new Date(entry.fecha + 'T12:00:00')) : editable ? <input className="sheet-cell-input" type="date" name={`fecha-${index}`} aria-label="Fecha" defaultValue={index === entries.length ? defaultEntryDate(month) : undefined} disabled={consumptionBusy} onBlur={event=>void autosaveRow(index,event.currentTarget.form)} /> : ''}</td>
+                  <td>{entry?.catedratico || (editable ? <input className="sheet-cell-input" name={`descripcion-${index}`} aria-label="Descripción del consumo" disabled={consumptionBusy} placeholder="Describe el consumo" onBlur={event=>void autosaveRow(index,event.currentTarget.form)} /> : '')}{entry?.id && <button className="button secondary small no-print" type="button" onClick={()=>void editFormatEntry(entry)}>Editar</button>}</td>
+                    <td>{entry ? entry.tipo === 'ajuste' ? formatAmount(entry.importe, formatUnit) : entry.unidad === 'quetzales' ? money(entry.importe) : `${Number(entry.descripcion || 0).toLocaleString('es-GT')} fotocopias` : editable ? <div className="sheet-cell-amount"><input className="sheet-cell-input" type="number" name={`monto-${index}`} min={draftUnits[index] === 'quetzales' ? '0.01' : '1'} step={draftUnits[index] === 'quetzales' ? '0.01' : '1'} aria-label="Cantidad consumida" disabled={consumptionBusy} placeholder="Cantidad" value={draftAmounts[index] || ''} onChange={(event) => setDraftAmounts((current) => ({ ...current, [index]: event.target.value }))} onBlur={event=>void autosaveRow(index,event.currentTarget.form)} /><select className="sheet-unit-select" name={`unidad-${index}`} aria-label="Unidad del consumo" disabled={consumptionBusy} value={draftUnits[index] || 'fotocopias'} onChange={(event) => setDraftUnits((current) => ({ ...current, [index]: event.target.value as 'fotocopias' | 'quetzales' }))} onBlur={event=>void autosaveRow(index,event.currentTarget.form)}><option value="fotocopias">Copias</option><option value="quetzales">Quetzales</option></select></div> : ''}</td>
                   <td>{entry ? formatAmount(entry.saldo, formatUnit) : editable && amountThroughRow ? formatAmount(activeBalance - amountThroughRow, formatUnit) : ''}</td>
                 </tr>;
               })}
