@@ -1,6 +1,7 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { normalizeUsername } from '@/lib/usernames';
 
 function serviceClient() {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -34,7 +35,15 @@ export async function POST(request: Request) {
   const { data: school, error: schoolError } = await admin.from('escuelas').insert(schoolValues).select('id,nombre').single();
   if (schoolError || !school) return NextResponse.json({ error: schoolError?.message || 'No se pudo crear la escuela.' }, { status: 400 });
 
-  const username = `director${school.id}`;
+  const baseUsername = normalizeUsername(school.nombre);
+  let username = baseUsername;
+  let suffix = 2;
+  while (true) {
+    const { data: duplicate, error: lookupError } = await admin.from('perfiles').select('id').ilike('usuario', username).maybeSingle();
+    if (lookupError) { await admin.from('escuelas').delete().eq('id', school.id); return NextResponse.json({ error: lookupError.message }, { status: 500 }); }
+    if (!duplicate) break;
+    const ending = String(suffix++); username = `${baseUsername.slice(0, 32 - ending.length)}${ending}`;
+  }
   const email = `${username}@example.com`;
   const { data: authData, error: authError } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
   if (authError || !authData.user) {

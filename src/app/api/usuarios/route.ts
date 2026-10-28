@@ -1,6 +1,7 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { normalizeUsername } from '@/lib/usernames';
 
 function serviceClient() {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -34,17 +35,24 @@ export async function POST(request: Request) {
   if ('error' in access) return access.error;
   const body = await request.json().catch(() => null);
   const nombre = String(body?.nombre || '').trim();
-  const username = String(body?.usuario || '').trim().toLowerCase();
+  let username = String(body?.usuario || '').trim().toLowerCase();
   const password = typeof body?.password === 'string' ? body.password : '';
   const role = body?.rol;
   const schoolId = Number(body?.escuela_id) || null;
   let clientId = Number(body?.cliente_id) || null;
   const createClient = body?.crear_cliente === true || body?.crear_cliente === 'true';
-  if (!nombre || !/^[a-z0-9._-]{3,32}$/.test(username) || password.length < 8 || !['admin', 'director', 'cliente'].includes(role)) {
+  if (!nombre || (role !== 'director' && !/^[a-z0-9._-]{3,32}$/.test(username)) || password.length < 8 || !['admin', 'director', 'cliente'].includes(role)) {
     return NextResponse.json({ error: 'Completa nombre, usuario válido, contraseña de 8 caracteres y tipo de cuenta.' }, { status: 400 });
   }
   if (role === 'director' && !schoolId) return NextResponse.json({ error: 'Selecciona la escuela del director.' }, { status: 400 });
   if (role === 'cliente' && !clientId && !createClient) return NextResponse.json({ error: 'Selecciona o crea un cliente para vincular la cuenta.' }, { status: 400 });
+  if (role === 'director') {
+    const { data: school, error: schoolError } = await access.admin.from('escuelas').select('nombre').eq('id', schoolId).single();
+    if (schoolError || !school) return NextResponse.json({ error: 'No se encontró la escuela elegida.' }, { status: 404 });
+    const base = normalizeUsername(school.nombre); username = base; let suffix = 2;
+    while (true) { const { data: duplicate, error: lookupError } = await access.admin.from('perfiles').select('id').ilike('usuario', username).maybeSingle(); if (lookupError) return NextResponse.json({ error: lookupError.message }, { status: 500 }); if (!duplicate) break; const ending=String(suffix++); username=`${base.slice(0,32-ending.length)}${ending}`; }
+  }
+  if (!/^[a-z0-9._-]{3,32}$/.test(username)) return NextResponse.json({ error: 'El nombre de escuela no produce un usuario válido. Cambia el nombre de escuela.' }, { status: 400 });
 
   const { data: duplicate } = await access.admin.from('perfiles').select('id').ilike('usuario', username).limit(1).maybeSingle();
   if (duplicate) return NextResponse.json({ error: 'Ese usuario ya existe.' }, { status: 409 });

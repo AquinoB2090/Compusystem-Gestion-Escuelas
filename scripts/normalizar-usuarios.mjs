@@ -31,11 +31,11 @@ function shortPassword() {
   return `Aula-${part}`;
 }
 
-const { data: profiles, error } = await supabase.from('perfiles').select('id,nombre,usuario,rol').order('rol').order('nombre');
+const { data: profiles, error } = await supabase.from('perfiles').select('id,nombre,usuario,rol,escuelas(nombre)').order('rol').order('escuela_id').order('nombre');
 if (error) throw new Error(`No se pudieron leer los perfiles: ${error.message}`);
 if (!profiles?.length) throw new Error('No hay usuarios para procesar.');
 const used = new Set();
-const changes = profiles.map(profile => ({ profile, username: uniqueUsername(profile.usuario || profile.nombre, used), password: shortPassword() }));
+const changes = profiles.map(profile => { const school = Array.isArray(profile.escuelas) ? profile.escuelas[0] : profile.escuelas; const preferred = profile.rol === 'director' ? (school?.nombre || profile.nombre) : (profile.usuario || profile.nombre); return { profile, username: uniqueUsername(preferred, used), password: shortPassword() }; });
 
 if (!apply) {
   console.log(`Vista previa: ${changes.length} cuentas. No se cambió ninguna contraseña ni usuario.`);
