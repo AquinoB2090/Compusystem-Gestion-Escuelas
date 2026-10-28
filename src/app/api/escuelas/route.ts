@@ -34,8 +34,8 @@ export async function POST(request: Request) {
   const { data: school, error: schoolError } = await admin.from('escuelas').insert(schoolValues).select('id,nombre').single();
   if (schoolError || !school) return NextResponse.json({ error: schoolError?.message || 'No se pudo crear la escuela.' }, { status: 400 });
 
-  // This internal address identifies the account; directors sign in using the school and password.
-  const email = `director-${school.id}@example.com`;
+  const username = `director${school.id}`;
+  const email = `${username}@example.com`;
   const { data: authData, error: authError } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
   if (authError || !authData.user) {
     await admin.from('escuelas').delete().eq('id', school.id);
@@ -45,6 +45,7 @@ export async function POST(request: Request) {
   const { error: profileError } = await admin.from('perfiles').insert({
     id: authData.user.id,
     nombre: directorNombre,
+    usuario: username,
     rol: 'director',
     escuela_id: school.id,
   });
@@ -54,5 +55,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: profileError.message }, { status: 400 });
   }
 
-  return NextResponse.json({ school }, { status: 201 });
+  return NextResponse.json({ school, username }, { status: 201 });
 }
