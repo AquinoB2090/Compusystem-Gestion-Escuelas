@@ -206,13 +206,11 @@ export default function AdminSchools({
       window.alert('El saldo debe ser un numero entero de fotocopias igual o mayor que cero.');
       return;
     }
-    const motivo = window.prompt('Motivo del ajuste:');
-    if (!motivo?.trim()) return;
     setSchoolBusy(true);
     const response = await fetch('/api/saldos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ maestro_id: teacher.id, saldo_fotocopias: saldo, motivo: motivo.trim() }),
+      body: JSON.stringify({ maestro_id: teacher.id, saldo_fotocopias: saldo }),
     });
     const result = await response.json().catch(() => ({}));
     setSchoolBusy(false);

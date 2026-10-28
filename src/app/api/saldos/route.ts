@@ -19,9 +19,8 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const maestroId = Number(body?.maestro_id);
   const copias = Number(body?.saldo_fotocopias);
-  const motivo = String(body?.motivo || '').trim();
-  if (!Number.isInteger(maestroId) || maestroId < 1 || !Number.isInteger(copias) || copias < 0 || !motivo) {
-    return NextResponse.json({ error: 'Indica un saldo entero de fotocopias y el motivo del ajuste.' }, { status: 400 });
+  if (!Number.isInteger(maestroId) || maestroId < 1 || !Number.isInteger(copias) || copias < 0) {
+    return NextResponse.json({ error: 'Indica un saldo entero de fotocopias.' }, { status: 400 });
   }
 
   const admin = serviceClient();
@@ -39,7 +38,7 @@ export async function POST(request: Request) {
     maestro_id: maestroId,
     escuela_id: teacher.escuela_id,
     saldo_delta: delta,
-    motivo,
+    motivo: 'Edición administrativa de saldo',
     creado_por: user.id,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
