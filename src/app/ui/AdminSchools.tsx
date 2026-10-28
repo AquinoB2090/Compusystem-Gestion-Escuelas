@@ -281,7 +281,7 @@ export default function AdminSchools({
           automaticDefaults: index === entries.length && fecha === today && !descripcion && !(monto > 0),
         };
       })
-      .filter((row): row is NonNullable<typeof row> => Boolean(row) && !row.automaticDefaults && (row.fecha || row.descripcion || Number.isFinite(row.monto) && row.monto > 0));
+      .filter((row): row is NonNullable<typeof row> => row !== null && !row.automaticDefaults && Boolean(row.fecha || row.descripcion || Number.isFinite(row.monto) && row.monto > 0));
     if (!pending.length) {
       if (autosavedRows.current.size) { autosavedRows.current.clear(); setAutoSaveStatus('Todos los cambios están guardados.'); setSheetRefresh(value=>value+1); await onRefresh(); return; }
       setConsumptionError('Ingresa al menos un consumo antes de guardar el formato.');
@@ -339,7 +339,7 @@ export default function AdminSchools({
     if (!Number.isFinite(amount) || amount <= 0 || (unit === 'fotocopias' && !Number.isInteger(amount))) { setSheetError('La cantidad no es válida.'); return; }
     const nextDate = window.prompt('Fecha (AAAA-MM-DD):', entry.fecha); if (!nextDate) return;
     const nextDescription = window.prompt('Descripción:', entry.catedratico || ''); if (!nextDescription?.trim()) return;
-    const response = await fetch('/api/movimientos', {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:'consumo',id:entry.id,cantidad:amount,unidad,fecha:nextDate,descripcion:nextDescription.trim()})});
+    const response = await fetch('/api/movimientos', {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:'consumo',id:entry.id,cantidad:amount,unidad:unit,fecha:nextDate,descripcion:nextDescription.trim()})});
     const result = await response.json().catch(()=>({})); if (!response.ok) { setSheetError(result.error || 'No se pudo editar la fila.'); return; }
     setSheetRefresh(value=>value+1); await onRefresh();
   }
