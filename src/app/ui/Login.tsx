@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import { toast } from './Toaster';
 
 export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setErrorState] = useState('');
   const [busy, setBusy] = useState(false);
+  const setError = (message: string) => { setErrorState(message); if (message) toast.error(message); };
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

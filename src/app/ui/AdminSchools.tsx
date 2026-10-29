@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
 import { downloadTeacherSheetPdf } from '@/lib/teacherSheetPdf';
+import { toast } from './Toaster';
 
 type School = { id: number; nombre: string };
 type Teacher = { id: number; nombre: string; escuela_id: number; tipo_formato?: 'quetzales' | 'fotocopias'; activo?: boolean };
@@ -61,27 +62,34 @@ export default function AdminSchools({
   const [directorName, setDirectorName] = useState('');
   const [directorPassword, setDirectorPassword] = useState('');
   const [schoolBusy, setSchoolBusy] = useState(false);
-  const [schoolError, setSchoolError] = useState('');
-  const [schoolSuccess, setSchoolSuccess] = useState('');
+  const [schoolError, setSchoolErrorState] = useState('');
+  const [schoolSuccess, setSchoolSuccessState] = useState('');
+  const setSchoolError = (message: string) => { setSchoolErrorState(message); if (message) toast.error(message); };
+  const setSchoolSuccess = (message: string) => { setSchoolSuccessState(message); if (message) toast.success(message); };
   const [addingTeacher, setAddingTeacher] = useState(false);
   const [teacherSearch, setTeacherSearch] = useState('');
   const [globalTeacherSearch, setGlobalTeacherSearch] = useState('');
   const [teacherName, setTeacherName] = useState('');
   const [teacherBusy, setTeacherBusy] = useState(false);
-  const [teacherError, setTeacherError] = useState('');
-  const [teacherSuccess, setTeacherSuccess] = useState('');
+  const [teacherError, setTeacherErrorState] = useState('');
+  const [teacherSuccess, setTeacherSuccessState] = useState('');
+  const setTeacherError = (message: string) => { setTeacherErrorState(message); if (message) toast.error(message); };
+  const setTeacherSuccess = (message: string) => { setTeacherSuccessState(message); if (message) toast.success(message); };
   const [activeTeacher, setActiveTeacher] = useState<Teacher | null>(null);
   const [month, setMonth] = useState(currentMonth);
   const [summaryMonth, setSummaryMonth] = useState(currentMonth);
   const [entries, setEntries] = useState<SheetEntry[]>([]);
   const [monthlyConsumption, setMonthlyConsumption] = useState<MonthlyConsumption[]>([]);
-  const [summaryError, setSummaryError] = useState('');
-  const [sheetError, setSheetError] = useState('');
+  const [summaryError, setSummaryErrorState] = useState('');
+  const [sheetError, setSheetErrorState] = useState('');
+  const setSummaryError = (message: string) => { setSummaryErrorState(message); if (message) toast.error(message); };
+  const setSheetError = (message: string) => { setSheetErrorState(message); if (message) toast.error(message); };
   const [consumptionBusy, setConsumptionBusy] = useState(false);
   const [editingEntry, setEditingEntry] = useState<SheetEntry | null>(null);
   const [editingValues, setEditingValues] = useState({ fecha: '', descripcion: '', cantidad: '', unidad: 'fotocopias' as 'fotocopias' | 'quetzales' });
   const [pdfBusy, setPdfBusy] = useState(false);
-  const [consumptionError, setConsumptionError] = useState('');
+  const [consumptionError, setConsumptionErrorState] = useState('');
+  const setConsumptionError = (message: string) => { setConsumptionErrorState(message); if (message) toast.error(message); };
   const [sheetRefresh, setSheetRefresh] = useState(0);
   const dialog = useRef<HTMLDialogElement>(null);
 
@@ -207,7 +215,7 @@ export default function AdminSchools({
     if (value === null) return;
     const saldo = Number(value);
     if (!Number.isInteger(saldo) || saldo < 0) {
-      window.alert('El saldo debe ser un numero entero de fotocopias igual o mayor que cero.');
+      setSheetError('El saldo debe ser un número entero de fotocopias igual o mayor que cero.');
       return;
     }
     setSchoolBusy(true);
@@ -219,11 +227,12 @@ export default function AdminSchools({
     const result = await response.json().catch(() => ({}));
     setSchoolBusy(false);
     if (!response.ok) {
-      window.alert(result.error || 'No se pudo actualizar el saldo.');
+      setSheetError(result.error || 'No se pudo actualizar el saldo.');
       return;
     }
     setSheetRefresh((current) => current + 1);
     await onRefresh();
+    toast.success('Saldo actualizado correctamente.');
   }
 
   async function registerConsumption(event: React.FormEvent<HTMLFormElement>) {
@@ -260,6 +269,7 @@ export default function AdminSchools({
     setSheetRefresh(value => value + 1);
     await onRefresh();
     setConsumptionBusy(false);
+    toast.success('Consumo registrado y saldo actualizado.');
   }
 
   function beginEditEntry(entry: SheetEntry) {
@@ -290,6 +300,7 @@ export default function AdminSchools({
     setEditingEntry(null);
     setSheetRefresh(value => value + 1);
     await onRefresh();
+    toast.success('Consumo actualizado correctamente.');
   }
 
   async function editCurrentBalance() {
@@ -315,6 +326,7 @@ export default function AdminSchools({
         balance: activeBalance,
         entries: (data || []) as SheetEntry[],
       });
+      toast.success('PDF del formato descargado.');
     } catch {
       setSheetError('No se pudo descargar el PDF. Inténtalo de nuevo.');
     } finally {

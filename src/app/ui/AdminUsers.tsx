@@ -1,13 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { toast } from './Toaster';
 
 const schoolUsername=(name:string)=>name.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,'').replace(/[^a-z0-9._-]/g,'').slice(0,32);
 type User = { id: string; nombre: string; usuario: string; rol: 'admin'|'director'|'cliente'; escuela_id: number|null; cliente_id: number|null; escuelas?: { nombre: string }|null; clientes_individuales?: { nombre: string }|null };
 export default function AdminUsers({ schools }: { schools: { id: number; nombre: string }[] }) {
   const [users, setUsers] = useState<User[]>([]); const [clients, setClients] = useState<{id:number;nombre:string}[]>([]);
   const [role, setRole] = useState('cliente'); const [schoolId, setSchoolId] = useState(''); const [username, setUsername] = useState('');
-  const [error, setError] = useState(''); const [notice, setNotice] = useState(''); const [busy, setBusy] = useState(false);
+  const [error, setErrorState] = useState(''); const [notice, setNoticeState] = useState(''); const [busy, setBusy] = useState(false);
+  const setError = (message: string) => { setErrorState(message); if (message) toast.error(message); };
+  const setNotice = (message: string) => { setNoticeState(message); if (message) toast.success(message); };
   async function load() { const [u,c] = await Promise.all([fetch('/api/usuarios'), fetch('/api/clientes')]); const ud=await u.json(); const cd=await c.json(); if(!u.ok){setError(ud.error||'No se pudieron cargar las cuentas');return;} setUsers(ud.users||[]); setClients(cd.clients||[]); }
   useEffect(()=>{void load();},[]);
   async function create(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); const form=event.currentTarget; setBusy(true);setError('');setNotice(''); const data=Object.fromEntries(new FormData(form).entries()); const response=await fetch('/api/usuarios',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const result=await response.json();setBusy(false);if(!response.ok){setError(result.error||'No se pudo crear la cuenta');return;}form.reset();setNotice(`Cuenta creada. Usuario: ${result.usuario}. Guarda la contraseña ahora; no se podrá volver a consultar.`);await load(); }
