@@ -115,7 +115,7 @@ export default function AdminSchools({
     setEntries([]);
     setSheetError('');
     Promise.all([
-      supabase.from('hoja_maestro_acumulada').select('id,fecha,tipo,catedratico,descripcion,importe,saldo,unidad').eq('maestro_id', activeTeacher.id).eq('periodo', `${month}-01`).order('fecha'),
+      supabase.from('hoja_maestro_acumulada').select('fecha,tipo,catedratico,descripcion,importe,saldo,unidad').eq('maestro_id', activeTeacher.id).eq('periodo', `${month}-01`).order('fecha'),
       supabase.from('consumos').select('id,fecha,catedratico,descripcion,monto,unidad').eq('maestro_id', activeTeacher.id).eq('periodo', `${month}-01`).eq('anulado', false),
     ]).then(([sheet, consumptions]) => {
       if (cancelled) return;
