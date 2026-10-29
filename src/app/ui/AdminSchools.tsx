@@ -36,6 +36,7 @@ const money = (amount: number) => `Q ${Number(amount || 0).toLocaleString('es-GT
 const formatAmount = (amount: number, unit: 'quetzales' | 'fotocopias') => unit === 'quetzales'
   ? money(amount)
   : `${(Number(amount || 0) * COPIES_PER_QUETZAL).toLocaleString('es-GT', { maximumFractionDigits: 2 })} fotocopias`;
+const formatDualAmount = (quetzales: number, copies: number) => `${Number(copies || 0).toLocaleString('es-GT', { maximumFractionDigits: 2 })} fotocopias · ${money(quetzales)}`;
 const monthLabel = (value: string) => {
   const [year, month] = value.split('-').map(Number);
   return new Intl.DateTimeFormat('es-GT', { month: 'long', year: 'numeric' }).format(new Date(year, month - 1, 1));
@@ -464,7 +465,7 @@ export default function AdminSchools({
           <div className="school-sheet-branding"><Image src="/compusystem-logo.jpeg" alt="Logotipo de Compusystem" width={802} height={507} className="school-sheet-logo" /></div>
           <div className="school-sheet-contact"><b>Prop. Olga Marina Arrivillaga Aldana de Aquino</b><span>Barrio El Porvenir, Guastatoya, El Progreso</span><span>Tel. 7945-0482 · e-mail: compussystem@hotmail.com</span><span>NIT 48577030</span></div>
           <div className="school-sheet-rule" />
-          <div className="school-sheet-meta"><span>Seño: <b>{activeTeacher?.nombre || '________________________'}</b></span><span>Mes <b>{monthLabel(month)}</b></span><b>{formatAmount(activeBalance, formatUnit)}</b></div>
+          <div className="school-sheet-meta"><span>Seño: <b>{activeTeacher?.nombre || '________________________'}</b></span><span>Mes <b>{monthLabel(month)}</b></span><b>{formatDualAmount(activeBalance, activeBalance * COPIES_PER_QUETZAL)}</b></div>
           {consumptionError && <p className="sheet-entry-error no-print">{consumptionError}</p>}
           {sheetError && <p className="sheet-load-error no-print">{sheetError}</p>}
           <div className="teacher-format-actions no-print">
@@ -481,7 +482,7 @@ export default function AdminSchools({
           </form>
           <section className="table-card client-history teacher-format-history">
             <div className="table-title">Movimientos de {activeTeacher?.nombre || 'maestro'}</div>
-            <div className="teacher-history-scroll"><table><thead><tr><th>FECHA</th><th>DETALLE</th><th>TIPO</th><th>IMPORTE</th><th>SALDO</th><th className="no-print">ACCIONES</th></tr></thead>
+            <div className="teacher-history-scroll"><table><thead><tr><th>FECHA</th><th>DETALLE</th><th>TIPO</th><th>CONSUMO (COPIAS · Q)</th><th>SALDO (COPIAS · Q)</th><th className="no-print">ACCIONES</th></tr></thead>
               <tbody>{entries.map((entry, index) => <tr key={`${entry.tipo}-${entry.id ?? index}`}>
                 {editingEntry?.id === entry.id && entry.tipo === 'consumo' ? <td colSpan={6}><form className="teacher-edit-row" onSubmit={saveEditedEntry}>
                   <label>Fecha<input className="teacher-dark-field" type="date" value={editingValues.fecha} onChange={event => setEditingValues(current => ({ ...current, fecha: event.target.value }))} required /></label>
@@ -489,7 +490,7 @@ export default function AdminSchools({
                   <label>Cantidad<input className="teacher-dark-field" type="number" min="0.01" step={editingValues.unidad === 'fotocopias' ? '1' : '0.01'} value={editingValues.cantidad} onChange={event => setEditingValues(current => ({ ...current, cantidad: event.target.value }))} required /></label>
                   <label>Unidad<select className="teacher-dark-field" value={editingValues.unidad} onChange={event => setEditingValues(current => ({ ...current, unidad: event.target.value as 'fotocopias' | 'quetzales' }))}><option value="fotocopias">Fotocopias</option><option value="quetzales">Quetzales</option></select></label>
                   <div className="teacher-edit-actions"><button className="button primary small" disabled={consumptionBusy}>Guardar</button><button className="button secondary small" type="button" onClick={() => setEditingEntry(null)}>Cancelar</button></div>
-                </form></td> : <><td>{entry.fecha}</td><td>{entry.tipo === 'ajuste' ? entry.descripcion : entry.catedratico}</td><td>{entry.tipo === 'ajuste' ? 'Ajuste de saldo' : 'Consumo'}</td><td>{entry.tipo === 'ajuste' ? formatAmount(entry.importe, formatUnit) : entry.unidad === 'quetzales' ? money(entry.importe) : `${Number(entry.descripcion || 0).toLocaleString('es-GT')} fotocopias`}</td><td>{formatAmount(entry.saldo, formatUnit)}</td><td className="no-print">{entry.tipo === 'consumo' && entry.id && <button className="button secondary small" type="button" onClick={() => beginEditEntry(entry)}>Editar</button>}</td></>}
+                </form></td> : <><td>{entry.fecha}</td><td>{entry.tipo === 'ajuste' ? entry.descripcion : entry.catedratico}</td><td>{entry.tipo === 'ajuste' ? 'Ajuste de saldo' : 'Consumo'}</td><td>{entry.tipo === 'ajuste' ? formatDualAmount(entry.importe, entry.importe * COPIES_PER_QUETZAL) : formatDualAmount(entry.importe, entry.unidad === 'fotocopias' ? Number(entry.descripcion || 0) : entry.importe * COPIES_PER_QUETZAL)}</td><td>{formatDualAmount(entry.saldo, entry.saldo * COPIES_PER_QUETZAL)}</td><td className="no-print">{entry.tipo === 'consumo' && entry.id && <button className="button secondary small" type="button" onClick={() => beginEditEntry(entry)}>Editar</button>}</td></>}
               </tr>)}
               {!entries.length && <tr><td colSpan={6} className="empty">No hay movimientos registrados para este mes.</td></tr>}</tbody>
             </table></div>

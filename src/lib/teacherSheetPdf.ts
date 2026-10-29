@@ -19,9 +19,7 @@ type TeacherSheetPdfOptions = {
 
 const copiesPerQuetzal = 4;
 const money = (amount: number) => `Q ${Number(amount || 0).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const amountLabel = (amount: number, unit: 'quetzales' | 'fotocopias') => unit === 'quetzales'
-  ? money(amount)
-  : `${(Number(amount || 0) * copiesPerQuetzal).toLocaleString('es-GT', { maximumFractionDigits: 2 })} fotocopias`;
+const dualAmountLabel = (quetzales: number, copies: number) => `${Number(copies || 0).toLocaleString('es-GT', { maximumFractionDigits: 2 })} fotocopias · ${money(quetzales)}`;
 const dateLabel = (value: string) => value
   ? new Intl.DateTimeFormat('es-GT').format(new Date(`${value}T12:00:00`))
   : '';
@@ -42,7 +40,7 @@ async function loadLogoData(): Promise<string | null> {
   }
 }
 
-export async function downloadTeacherSheetPdf({ teacherName, month, unit, balance, entries }: TeacherSheetPdfOptions) {
+export async function downloadTeacherSheetPdf({ teacherName, month, balance, entries }: TeacherSheetPdfOptions) {
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
   const pageWidth = pdf.internal.pageSize.getWidth();
   const logo = await loadLogoData();
@@ -68,25 +66,25 @@ export async function downloadTeacherSheetPdf({ teacherName, month, unit, balanc
   pdf.setFontSize(10);
   pdf.text(`Seño: ${teacherName}`, 12, 61);
   pdf.text(`Mes: ${monthName}`, pageWidth * 0.56, 61);
-  pdf.text(amountLabel(balance, unit), pageWidth - 12, 61, { align: 'right' });
+  pdf.text(dualAmountLabel(balance, balance * copiesPerQuetzal), pageWidth - 12, 61, { align: 'right' });
 
   autoTable(pdf, {
     startY: 67,
-    head: [['Fecha', 'Descripción', 'Cantidad', 'Saldo fotocopias']],
+    head: [['Fecha', 'Descripción', 'Consumo (copias · Q)', 'Saldo (copias · Q)']],
     body: entries.length
       ? entries.map((entry) => [
         dateLabel(entry.fecha),
         entry.catedratico || '',
         entry.tipo === 'ajuste'
-          ? amountLabel(entry.importe, 'fotocopias')
-          : entry.unidad === 'quetzales' ? money(entry.importe) : `${Number(entry.descripcion || 0).toLocaleString('es-GT')} fotocopias`,
-        amountLabel(entry.saldo, 'fotocopias'),
+          ? dualAmountLabel(entry.importe, entry.importe * copiesPerQuetzal)
+          : dualAmountLabel(entry.importe, entry.unidad === 'fotocopias' ? Number(entry.descripcion || 0) : entry.importe * copiesPerQuetzal),
+        dualAmountLabel(entry.saldo, entry.saldo * copiesPerQuetzal),
       ])
       : [['', '', 'No hay consumos registrados para este mes.', '']],
     theme: 'grid',
     styles: { font: 'times', fontSize: 9, textColor: [25, 25, 25], lineColor: [68, 68, 68], lineWidth: 0.2, cellPadding: 2.2 },
     headStyles: { fontStyle: 'bold', fillColor: [255, 255, 255], textColor: [25, 25, 25] },
-    columnStyles: { 0: { cellWidth: 27 }, 1: { cellWidth: 'auto' }, 2: { cellWidth: 43, halign: 'right' }, 3: { cellWidth: 36, halign: 'right' } },
+    columnStyles: { 0: { cellWidth: 27 }, 1: { cellWidth: 'auto' }, 2: { cellWidth: 48, halign: 'right' }, 3: { cellWidth: 48, halign: 'right' } },
     margin: { left: 12, right: 12, bottom: 18 },
     didDrawPage: () => {
       const pageHeight = pdf.internal.pageSize.getHeight();
