@@ -379,7 +379,7 @@ export default function AdminSchools({
             <div className="stat-card">
               <div className="stat-top"><span>Fotocopias consumidas</span><span className="stat-icon orange">▤</span></div>
               <strong>{consumedCopies.toLocaleString('es-GT')} fotocopias</strong>
-              <small>Equivalente de las copias: {money(consumedCopiesQuetzales)} · {monthLabel(summaryMonth)}</small>
+              <small>{monthLabel(summaryMonth)}</small>
             </div>
             <div className="stat-card">
               <div className="stat-top"><span>Maestros con consumo</span><span className="stat-icon blue">♙</span></div>
