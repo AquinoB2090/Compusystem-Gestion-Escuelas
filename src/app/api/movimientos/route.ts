@@ -25,7 +25,7 @@ export async function PATCH(request: Request) {
   const admin = createSupabaseClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
   const table = tipo === 'consumo' ? 'consumos' : 'asignaciones';
   const values: Record<string, string | number> = tipo === 'consumo'
-    ? { fecha: String(body?.fecha || ''), periodo: `${String(body?.fecha || '').slice(0,7)}-01`, catedratico: String(body?.descripcion || body?.catedratico || '').trim(), descripcion: String(cantidad), monto: unidad === 'fotocopias' ? cantidad / 4 : cantidad, unidad }
+    ? { fecha: String(body?.fecha || ''), catedratico: String(body?.descripcion || body?.catedratico || '').trim(), descripcion: String(cantidad), monto: unidad === 'fotocopias' ? cantidad / 4 : cantidad, unidad }
     : { monto: cantidad / 4, unidad_ingresada: 'fotocopias' };
   if (tipo === 'consumo' && (!String(values.fecha || '') || !String(values.catedratico || '') || !/^\d{4}-\d{2}-\d{2}$/.test(String(values.fecha || '')))) {
     return NextResponse.json({ error: 'Completa una fecha válida y una descripción.' }, { status: 400 });
