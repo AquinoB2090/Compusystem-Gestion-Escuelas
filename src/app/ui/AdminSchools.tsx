@@ -465,7 +465,7 @@ export default function AdminSchools({
           <div className="school-sheet-branding"><Image src="/compusystem-logo.jpeg" alt="Logotipo de Compusystem" width={802} height={507} className="school-sheet-logo" /></div>
           <div className="school-sheet-contact"><b>Prop. Olga Marina Arrivillaga Aldana de Aquino</b><span>Barrio El Porvenir, Guastatoya, El Progreso</span><span>Tel. 7945-0482 · e-mail: compussystem@hotmail.com</span><span>NIT 48577030</span></div>
           <div className="school-sheet-rule" />
-          <div className="school-sheet-meta"><span>Seño: <b>{activeTeacher?.nombre || '________________________'}</b></span><span>Mes <b>{monthLabel(month)}</b></span><b>{formatDualAmount(activeBalance, activeBalance * COPIES_PER_QUETZAL)}</b></div>
+          <div className="school-sheet-meta"><span>Docente: <b>{activeTeacher?.nombre || '________________________'}</b></span><span>Mes <b>{monthLabel(month)}</b></span><b>{formatDualAmount(activeBalance, activeBalance * COPIES_PER_QUETZAL)}</b></div>
           {consumptionError && <p className="sheet-entry-error no-print">{consumptionError}</p>}
           {sheetError && <p className="sheet-load-error no-print">{sheetError}</p>}
           <div className="teacher-format-actions no-print">

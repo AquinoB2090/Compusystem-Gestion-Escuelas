@@ -64,7 +64,7 @@ export async function downloadTeacherSheetPdf({ teacherName, month, balance, ent
   const monthName = new Intl.DateTimeFormat('es-GT', { month: 'long', year: 'numeric' }).format(new Date(year, monthNumber - 1, 1));
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(10);
-  pdf.text(`Seño: ${teacherName}`, 12, 61);
+  pdf.text(`Docente: ${teacherName}`, 12, 61);
   pdf.text(`Mes: ${monthName}`, pageWidth * 0.56, 61);
   pdf.text(dualAmountLabel(balance, balance * copiesPerQuetzal), pageWidth - 12, 61, { align: 'right' });
 
