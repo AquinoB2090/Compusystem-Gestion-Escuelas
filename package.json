@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test:clientes": "tsc -p tsconfig.test.json && node --test .next/test-clientes/tests/clientStatement.test.js",
     "usuarios:normalizar": "node --env-file=.env.local scripts/normalizar-usuarios.mjs"
   },
   "dependencies": {

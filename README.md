@@ -28,6 +28,20 @@ Aplicación web en español para registrar cheques, asignaciones mensuales y con
 - Catálogos editables de escuelas y maestros, anulaciones con motivo obligatorio, reportes CSV y creación de cuentas de director.
 - Vistas SQL `saldo_maestro`, `saldo_mensual`, `hoja_maestro` y `cheques_resumen`.
 - Funciones SQL con validaciones y permisos para las operaciones de administración.
+- Estado de cuenta PDF por cliente individual: desde el último abono (predeterminado), completo o por rango de fechas.
+- Historial de PDF por cliente con opciones para ver/descargar o eliminar cada reporte.
+
+## Reportes de clientes
+
+El PDF se genera en el navegador con jsPDF y luego se guarda en el bucket privado `reportes` de Supabase Storage, bajo la ruta `{cliente_id}/{AAAA-MM-DD_HHmm}_{tipo}.pdf`. No se crean tablas ni registros: el historial se obtiene únicamente de los archivos guardados. La primera vez que se usa, la aplicación crea el bucket automáticamente; también puedes crearlo a mano en **Supabase → Storage** con el nombre `reportes` y visibilidad privada. Las rutas de la API validan la sesión y el rol admin, y usan `SUPABASE_SECRET_KEY` solo del lado del servidor.
+
+El reporte **Desde el último abono** calcula el saldo anterior con todo el historial y muestra el último abono seguido de los movimientos posteriores. El reporte **Por rango** calcula el saldo anterior con todos los movimientos anteriores a la fecha inicial. Los consumos suman, los abonos restan y el PDF incluye el resumen de consumos, pagos y saldo pendiente.
+
+Para ejecutar las pruebas del cálculo de saldos:
+
+```bash
+npm run test:clientes
+```
 
 ## Seguridad y datos
 
