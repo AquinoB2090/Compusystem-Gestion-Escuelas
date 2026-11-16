@@ -1,0 +1,26 @@
+Verificación de corrección de permisos — Fase 2
+Fecha: 2026-11-16
+Corrección: Docs/modulo-precios/correccion_permisos.sql
+Alcance: aplicada y probada solo en la instancia Supabase local restaurada. No se ejecutó en producción.
+
+Permisos de upsert_producto
+- has_function_privilege: anon=false, authenticated=false, service_role=true.
+- Pruebas de ejecución: anon y authenticated recibieron bloqueo; service_role ejecutó la función correctamente.
+- Las llamadas y productos de prueba estuvieron dentro de transacciones revertidas.
+
+Documentos y archivos
+Se crearon temporalmente dos documentos y dos precios (uno aprobado y otro por revisar), más dos objetos de Storage, todo dentro de una transacción revertida.
+- admin: vio 2 documentos, 2 precios, 1 fila en cola_revision y 2 objetos Storage.
+- ventas: vio 1 documento aprobado, 1 precio aprobado, 1 fila en panel_precios, 0 filas en cola_revision y 1 objeto Storage aprobado.
+- director y cliente: 0 filas de los documentos, precios y objetos temporales.
+- admin pudo insertar un objeto de prueba en Storage; ventas recibió bloqueo al intentar subir uno.
+
+Integridad
+- La corrección pudo ejecutarse dos veces en la copia local.
+- La huella de las 11 tablas de escuelas/clientes coincide con la huella inicial.
+- Al terminar no quedaron filas temporales en documentos, productos, precios ni storage.objects.
+
+Limitación de la copia local
+El dump de esquema no contenía las políticas personalizadas de storage.objects que sí aparecieron en la inspección de producción. El SQL incluye DROP POLICY IF EXISTS para reemplazar la política de lectura conocida y crea reglas de lectura aprobada, lectura total para admin y subida para admin. Las pruebas validan el estado esperado después de aplicar la corrección, no la transición desde todas las políticas originales del proyecto.
+
+No se modificó ni desplegó nada en producción. El archivo SQL queda para revisión y ejecución manual del usuario.
