@@ -1,5 +1,6 @@
 node_modules/
 .next/
+supabase/.temp/
 .env*
 !.env.example
 .credenciales-acceso.local.md
