@@ -25,6 +25,12 @@ jobs:
             echo "Missing GitHub Actions variable: SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL)." >&2
             exit 1
           }
+          case "$SUPABASE_URL" in
+            postgresql://*|postgres://*)
+              echo "SUPABASE_URL must be the HTTPS project URL (e.g. https://<ref>.supabase.co), not a Postgres connection string (postgresql://...)." >&2
+              exit 1
+              ;;
+          esac
           test -n "$SUPABASE_SECRET_KEY" || {
             echo "Missing GitHub Actions secret: SUPABASE_SECRET_KEY." >&2
             echo "Add it under Settings > Secrets and variables > Actions > Repository secrets." >&2
