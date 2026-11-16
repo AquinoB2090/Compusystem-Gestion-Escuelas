@@ -4,7 +4,7 @@ on:
   # Supabase Free may pause projects with low database activity over a 7-day window.
   # Run a small read-only query a few times daily to keep recent activity consistent.
   schedule:
-    - cron: '13 6,14,22 * * *'
+    - cron: "13 6,14,22 * * *"
   workflow_dispatch:
 
 permissions:
