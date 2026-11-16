@@ -1,0 +1,21 @@
+Verificación Fase 2 — copia local restaurada
+Fecha: 2026-11-16
+Alcance: pruebas de lectura/RLS en el Supabase temporal; no se ejecutó SQL contra producción.
+
+Estado de la migración
+- Los objetos de precios ya existen en el respaldo actual. No se volvió a ejecutar modulo_precios_produccion.sql, rollback ni doble ejecución: la migración fallaría por nombres existentes y el rollback eliminaría objetos/datos presentes.
+- La huella de las 11 tablas de la guía coincide antes y después de las pruebas.
+- El perfil ventas temporal y las llamadas de prueba a upsert_producto se revirtieron. No quedan productos de prueba.
+
+Resultados de permisos
+- admin: pudo leer las tablas/vistas del módulo; categorias devolvió 4 filas.
+- ventas: vio su perfil temporal y no vio perfiles ajenos ni filas de escuelas, maestros, cheques, asignaciones, consumos, ajustes_saldo, clientes_individuales, consumos_clientes o liquidaciones_clientes.
+- ventas: no vio cola_revision ni remitentes. panel_precios y precios_vigentes devolvieron 0 filas porque el respaldo no tiene precios.
+- director y cliente: obtuvieron 0 filas de las tablas/vistas del módulo consultadas.
+- Las vistas precios_vigentes, panel_precios y cola_revision tienen security_invoker=true. Las tablas del módulo tienen RLS activo y no hay FK de las tablas del módulo hacia las tablas de escuelas/clientes enumeradas en la guía.
+
+Hallazgos que bloquean la aceptación
+1. upsert_producto tiene EXECUTE para anon y authenticated en el esquema restaurado, además de service_role. Una llamada como anon y otra como authenticated ejecutaron la función security-definer y devolvieron IDs. Ambas ocurrieron en transacciones locales revertidas; no hay productos de prueba persistidos. Esto contradice el criterio de que solo service_role pueda ejecutarla y la REVOKE presente en el SQL entregado.
+2. documentos tiene una política SELECT staff_select con qual mp_es_staff(), que habilita lectura directa a ventas sin filtrar documentos vinculados a precios aprobados. El respaldo actual tiene 0 documentos; la política permitiría leer futuras filas.
+
+No se corrigieron políticas ni privilegios: la guía prohíbe alterar funciones/políticas existentes sin una decisión del usuario. La Fase 2 queda detenida hasta decidir cómo corregir y validar estos permisos en una migración separada. No se recomienda crear usuarios ventas en producción mientras siga habilitado upsert_producto para anon/authenticated.
