@@ -86,7 +86,14 @@ async function receiveMessage(message: any, admin: any, accessToken: string, gra
     proveedor_id: sender.proveedor_id, storage_path: path, nombre_archivo: media.filename,
     mime, mensaje: media.caption, estado: 'pendiente',
   }).select('id').single();
-  if (insertError || !document) throw new Error('No se pudo registrar el mensaje recibido.');
+  if (insertError || !document) {
+    const { error: cleanupError } = await admin.storage.from('documentos-precios').remove([path]);
+    if (cleanupError) console.error('WhatsApp orphan file cleanup failed.');
+    // Meta may deliver the same webhook concurrently. The unique message ID
+    // makes the second insert a safe duplicate after its uploaded object is removed.
+    if (insertError?.code === '23505') return;
+    throw new Error('No se pudo registrar el mensaje recibido.');
+  }
   return Number(document.id);
 }
 
@@ -116,15 +123,18 @@ Deno.serve(async (request: Request) => {
 
   const admin = createClient(url, secretKey, { auth: { autoRefreshToken: false, persistSession: false } });
   const messages = (payload.entry || []).flatMap((entry: any) => entry.changes || []).flatMap((change: any) => change.value?.messages || []);
+  let intakeFailed = false;
   for (const message of messages) {
     try {
       const documentId = await receiveMessage(message, admin, accessToken, graphVersion);
       if (documentId) EdgeRuntime.waitUntil(invokeProcessor(url, secretKey, documentId, admin));
     } catch (cause) {
-      // The webhook is acknowledged to prevent Meta retries from duplicating already uploaded files.
+      // Non-2xx makes Meta retry delivery. Stored messages are deduplicated by wa_message_id.
+      intakeFailed = true;
       const reason = cause instanceof Error ? cause.message : 'No se pudo recibir el archivo.';
       console.error(`WhatsApp media intake failed: ${reason}`);
     }
   }
+  if (intakeFailed) return json({ error: 'No se pudieron recibir uno o más archivos.' }, 503);
   return json({ received: true });
 });
