@@ -58,15 +58,30 @@ async function requestGemini(apiKey: string, model: string, mime: string, bytes:
   const modelName = configuredModel.startsWith('models/') ? configuredModel.slice('models/'.length) : configuredModel;
   const contents = [promptForExtraction(), message ? `Texto adicional del remitente: ${message}` : null].filter(Boolean).join('\n\n');
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent`;
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-    signal: AbortSignal.timeout(90_000),
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: contents }, { inline_data: { mime_type: mime, data: toBase64(bytes) } }] }],
-      generationConfig: { responseMimeType: 'application/json' },
-    }),
+  const payload = JSON.stringify({
+    contents: [{ parts: [{ text: contents }, { inline_data: { mime_type: mime, data: toBase64(bytes) } }] }],
+    generationConfig: { responseMimeType: 'application/json' },
   });
+  const deadline = Date.now() + 120_000;
+  const backoffMs = [2_000, 4_000];
+  let response: Response | null = null;
+  for (let attempt = 0; attempt <= backoffMs.length; attempt++) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) throw new Error('Gemini no respondió dentro del tiempo límite. Reintenta el documento.');
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      signal: AbortSignal.timeout(Math.min(90_000, remainingMs)),
+      body: payload,
+    });
+    if (response.ok || response.status !== 503 || attempt === backoffMs.length) break;
+    const waitMs = backoffMs[attempt];
+    if (Date.now() + waitMs + 1_000 >= deadline) break;
+    console.warn('Gemini devolvió 503; se reintentará con espera exponencial.', { model: modelName, attempt: attempt + 1 });
+    await response.body?.cancel();
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
+  if (!response) throw new Error('Gemini no devolvió respuesta.');
   if (!response.ok) {
     const rawError = await response.text();
     let detail = rawError;
@@ -181,7 +196,7 @@ Deno.serve(async (request: Request) => {
     return json({ status: 'procesado', precios: saved });
   } catch (cause) {
     const message = cause instanceof DOMException && cause.name === 'TimeoutError'
-      ? 'Gemini tardó más de 90 segundos. Reintenta el documento.'
+      ? 'Gemini tardó demasiado. Reintenta el documento.'
       : cause instanceof Error ? cause.message : 'Error al procesar el documento.';
     console.error('Falló el procesamiento del documento.', { documentoId: document.id, message });
     await admin.from('documentos').update({ estado: 'error', error: message.slice(0, 1000) }).eq('id', documentId);
