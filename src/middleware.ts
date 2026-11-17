@@ -10,6 +10,15 @@ export async function middleware(request: NextRequest) {
   const publicRoute = request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname === '/api/login';
   if (!user && !publicRoute) return NextResponse.redirect(new URL('/login', request.url));
   if (user && request.nextUrl.pathname === '/login') return NextResponse.redirect(new URL('/', request.url));
+  if (user && !publicRoute) {
+    const { data: profile } = await supabase.from('perfiles').select('rol').eq('id', user.id).eq('activo', true).maybeSingle();
+    const pathname = request.nextUrl.pathname;
+    const inInstallations = pathname === '/instalaciones' || pathname.startsWith('/instalaciones/');
+    const isSignout = pathname === '/auth/signout';
+    if (profile?.rol === 'ventas' && !inInstallations && !isSignout) return NextResponse.redirect(new URL('/instalaciones', request.url));
+    if (profile?.rol === 'ventas' && inInstallations && pathname !== '/instalaciones' && pathname !== '/instalaciones/precios') return NextResponse.redirect(new URL('/instalaciones', request.url));
+    if (inInstallations && profile?.rol !== 'admin' && profile?.rol !== 'ventas') return NextResponse.redirect(new URL('/', request.url));
+  }
   return response;
 }
 export const config = { matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'] };

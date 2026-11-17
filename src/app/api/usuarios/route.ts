@@ -41,7 +41,7 @@ export async function POST(request: Request) {
   const schoolId = Number(body?.escuela_id) || null;
   let clientId = Number(body?.cliente_id) || null;
   const createClient = body?.crear_cliente === true || body?.crear_cliente === 'true';
-  if (!nombre || (role !== 'director' && !/^[a-z0-9._-]{3,32}$/.test(username)) || password.length < 8 || !['admin', 'director', 'cliente'].includes(role)) {
+  if (!nombre || (role !== 'director' && !/^[a-z0-9._-]{3,32}$/.test(username)) || password.length < 8 || !['admin', 'director', 'cliente', 'ventas'].includes(role)) {
     return NextResponse.json({ error: 'Completa nombre, usuario válido, contraseña de 8 caracteres y tipo de cuenta.' }, { status: 400 });
   }
   if (role === 'director' && !schoolId) return NextResponse.json({ error: 'Selecciona la escuela del director.' }, { status: 400 });
