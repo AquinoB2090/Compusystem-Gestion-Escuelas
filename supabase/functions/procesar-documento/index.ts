@@ -54,7 +54,8 @@ Devuelve SOLO JSON válido con esta estructura: {"items":[{"categoria":"Cámaras
 }
 
 async function requestGemini(apiKey: string, model: string, mime: string, bytes: Uint8Array, message: string | null) {
-  const modelName = model.startsWith('models/') ? model.slice('models/'.length) : model;
+  const configuredModel = model.trim().replace(/^['"]|['"]$/g, '').trim();
+  const modelName = configuredModel.startsWith('models/') ? configuredModel.slice('models/'.length) : configuredModel;
   const contents = [promptForExtraction(), message ? `Texto adicional del remitente: ${message}` : null].filter(Boolean).join('\n\n');
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent`;
   const response = await fetch(endpoint, {
