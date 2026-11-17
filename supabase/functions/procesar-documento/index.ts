@@ -56,16 +56,25 @@ Devuelve SOLO JSON válido con esta estructura: {"items":[{"categoria":"Cámaras
 async function requestGemini(apiKey: string, model: string, mime: string, bytes: Uint8Array, message: string | null) {
   const modelName = model.startsWith('models/') ? model.slice('models/'.length) : model;
   const contents = [promptForExtraction(), message ? `Texto adicional del remitente: ${message}` : null].filter(Boolean).join('\n\n');
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent`;
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify({
       contents: [{ parts: [{ text: contents }, { inline_data: { mime_type: mime, data: toBase64(bytes) } }] }],
       generationConfig: { responseMimeType: 'application/json' },
     }),
   });
-  if (!response.ok) throw new Error(`Gemini respondió con estado ${response.status}. Revisa GEMINI_API_KEY y GEMINI_MODEL.`);
+  if (!response.ok) {
+    const rawError = await response.text();
+    let detail = rawError;
+    try {
+      const parsed = JSON.parse(rawError);
+      detail = typeof parsed?.error?.message === 'string' ? parsed.error.message : rawError;
+    } catch { /* conserva el texto HTTP si la respuesta no es JSON */ }
+    detail = detail.replaceAll(apiKey, '[clave oculta]').replace(/\s+/g, ' ').trim().slice(0, 600);
+    throw new Error(`Gemini HTTP ${response.status}${detail ? `: ${detail}` : ''}`);
+  }
   const result = await response.json();
   const responseText = result?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text || '').join('').trim();
   if (!responseText) throw new Error('Gemini no devolvió contenido JSON.');
