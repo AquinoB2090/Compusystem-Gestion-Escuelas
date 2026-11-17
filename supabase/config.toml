@@ -1,0 +1,7 @@
+[functions.procesar-documento]
+# The handler checks either an admin user session or the server-only secret key.
+verify_jwt = false
+
+[functions.whatsapp-webhook]
+# Meta signs the raw body; the function verifies that signature itself.
+verify_jwt = false
