@@ -1,3 +1,7 @@
+[edge_runtime]
+# Necesario para que EdgeRuntime.waitUntil termine en funciones servidas en local.
+policy = "per_worker"
+
 [functions.procesar-documento]
 # The handler checks either an admin user session or the server-only secret key.
 verify_jwt = false

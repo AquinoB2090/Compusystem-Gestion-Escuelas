@@ -1,12 +1,29 @@
 /// <reference lib="deno.ns" />
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { normalizarItems, type NormalizedPrice } from '../_shared/utils.ts';
+import {
+  extractCandidateText,
+  geminiErrorMessage,
+  isRetryableStatus,
+  parseRetryDelayMs,
+  resolveModels,
+} from '../_shared/gemini.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+
+// Presupuestos por debajo del límite de 150s de una Edge Function (plan free).
+const TOTAL_GEMINI_BUDGET_MS = 95_000;
+const MODEL_BUDGET_MS = 40_000;
+const ATTEMPT_TIMEOUT_MS = 18_000;
+const STALE_PROCESSING_MS = 10 * 60_000;
+// gemini-3.8-flash piensa en "medium" por defecto; para extraer precios basta con "low".
+const THINKING_LEVELS = ['MINIMAL', 'LOW', 'MEDIUM', 'HIGH', 'XHIGH'];
+// Modelos estables de Gemini API documentados por Google, distintos del modelo principal.
+const DEFAULT_FALLBACK_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.6-flash'];
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -53,49 +70,81 @@ function promptForExtraction(): string {
 Devuelve SOLO JSON válido con esta estructura: {"items":[{"categoria":"Cámaras de seguridad | Aires acondicionados | Accesorios e instalación | Otros","marca":string|null,"modelo":string|null,"nombre":string,"descripcion":string|null,"especificaciones":object,"tipo":"lista"|"promocion","precio":number,"moneda":"GTQ"|"USD","incluye_iva":boolean|null,"vigente_desde":"YYYY-MM-DD"|null,"vigente_hasta":"YYYY-MM-DD"|null,"condiciones":string|null,"confianza":number}]}. Usa precios numéricos sin símbolos, y confianza entre 0 y 1. Si el documento no contiene precios de productos, responde {"items":[]}.`;
 }
 
-async function requestGemini(apiKey: string, model: string, mime: string, bytes: Uint8Array, message: string | null) {
-  const configuredModel = model.trim().replace(/^['"]|['"]$/g, '').trim();
-  const modelName = configuredModel.startsWith('models/') ? configuredModel.slice('models/'.length) : configuredModel;
+/**
+ * Prueba los modelos configurados en orden. Reintenta 429/5xx con espera
+ * exponencial (y Retry-After/retryDelay cuando Gemini lo envía) y pasa al
+ * siguiente modelo si la saturación persiste.
+ */
+async function requestGemini(apiKey: string, models: string[], mime: string, bytes: Uint8Array, message: string | null, thinkingLevel: string): Promise<{ data: unknown; model: string }> {
   const contents = [promptForExtraction(), message ? `Texto adicional del remitente: ${message}` : null].filter(Boolean).join('\n\n');
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent`;
+  const generationConfig: Record<string, unknown> = { responseMimeType: 'application/json' };
+  if (THINKING_LEVELS.includes(thinkingLevel)) generationConfig.thinkingConfig = { thinkingLevel };
   const payload = JSON.stringify({
     contents: [{ parts: [{ text: contents }, { inline_data: { mime_type: mime, data: toBase64(bytes) } }] }],
-    generationConfig: { responseMimeType: 'application/json' },
+    generationConfig,
   });
-  const deadline = Date.now() + 120_000;
-  const backoffMs = [2_000, 4_000];
-  let response: Response | null = null;
-  for (let attempt = 0; attempt <= backoffMs.length; attempt++) {
-    const remainingMs = deadline - Date.now();
-    if (remainingMs <= 0) throw new Error('Gemini no respondió dentro del tiempo límite. Reintenta el documento.');
-    response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      signal: AbortSignal.timeout(Math.min(90_000, remainingMs)),
-      body: payload,
-    });
-    if (response.ok || response.status !== 503 || attempt === backoffMs.length) break;
-    const waitMs = backoffMs[attempt];
-    if (Date.now() + waitMs + 1_000 >= deadline) break;
-    console.warn('Gemini devolvió 503; se reintentará con espera exponencial.', { model: modelName, attempt: attempt + 1 });
-    await response.body?.cancel();
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  const deadline = Date.now() + TOTAL_GEMINI_BUDGET_MS;
+  const failures: string[] = [];
+
+  for (const model of models) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+    const modelDeadline = Math.min(deadline, Date.now() + MODEL_BUDGET_MS);
+    let attempt = 0;
+
+    while (modelDeadline - Date.now() > 1_000) {
+      const remainingMs = Math.min(modelDeadline, deadline) - Date.now();
+      if (remainingMs <= 1_000) break;
+
+      let response: Response;
+      try {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+          signal: AbortSignal.timeout(Math.min(ATTEMPT_TIMEOUT_MS, remainingMs)),
+          body: payload,
+        });
+      } catch (cause) {
+        const isTimeout = cause instanceof DOMException && cause.name === 'TimeoutError';
+        const isNetworkError = cause instanceof TypeError;
+        if (!isTimeout && !isNetworkError) throw cause;
+        console.warn('Gemini no respondió; se probará otra opción.', { model, attempt: attempt + 1, isTimeout });
+        failures.push(`${model}: sin respuesta`);
+        break;
+      }
+
+      if (response.ok) {
+        const result = await response.json();
+        const responseText = extractCandidateText(result);
+        if (!responseText) throw new Error('Gemini no devolvió contenido JSON.');
+        try {
+          return { data: extractJson(responseText), model };
+        } catch {
+          throw new Error('Gemini devolvió una respuesta JSON inválida.');
+        }
+      }
+
+      const rawError = await response.text();
+      const detail = geminiErrorMessage(rawError, apiKey);
+      const label = `HTTP ${response.status}${detail ? `: ${detail}` : ''}`;
+      failures.push(`${model}: ${label}`);
+
+      if (response.status === 404) {
+        console.warn('GEMINI_MODEL no disponible; se probará el siguiente.', { model });
+        break;
+      }
+      if (!isRetryableStatus(response.status)) throw new Error(`Gemini ${label}`);
+
+      const waitMs = parseRetryDelayMs(rawError, response.headers.get('Retry-After'), attempt);
+      if (Date.now() + waitMs + 1_000 >= modelDeadline || Date.now() + waitMs >= deadline) break;
+      console.warn('Gemini está saturado; se reintentará.', { model, attempt: attempt + 1, status: response.status, waitMs });
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      attempt++;
+    }
   }
-  if (!response) throw new Error('Gemini no devolvió respuesta.');
-  if (!response.ok) {
-    const rawError = await response.text();
-    let detail = rawError;
-    try {
-      const parsed = JSON.parse(rawError);
-      detail = typeof parsed?.error?.message === 'string' ? parsed.error.message : rawError;
-    } catch { /* conserva el texto HTTP si la respuesta no es JSON */ }
-    detail = detail.replaceAll(apiKey, '[clave oculta]').replace(/\s+/g, ' ').trim().slice(0, 600);
-    throw new Error(`Gemini HTTP ${response.status}${detail ? `: ${detail}` : ''}`);
-  }
-  const result = await response.json();
-  const responseText = result?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text || '').join('').trim();
-  if (!responseText) throw new Error('Gemini no devolvió contenido JSON.');
-  return extractJson(responseText);
+
+  const tried = [...new Set(failures.map((failure) => failure.split(':')[0]))].join(', ') || 'ninguno';
+  const detail = failures[failures.length - 1] || 'sin detalles';
+  throw new Error(`Gemini no pudo procesar el documento por alta demanda o falta de capacidad. Modelos probados: ${tried}. Último error: ${detail}. Revisa la cuota de tu clave de Google AI Studio o cambia GEMINI_MODEL / GEMINI_FALLBACK_MODELS.`);
 }
 
 async function savePrices(admin: any, document: { id: number; proveedor_id: number | null }, items: NormalizedPrice[]) {
@@ -145,6 +194,58 @@ async function savePrices(admin: any, document: { id: number; proveedor_id: numb
   return saved;
 }
 
+/** Recupera documentos cuyo worker murió antes de actualizar el estado. */
+async function releaseStaleDocuments(admin: any) {
+  const cutoff = new Date(Date.now() - STALE_PROCESSING_MS).toISOString();
+  const { error: timestampError } = await admin.from('documentos')
+    .update({ estado: 'pendiente', error: 'El procesamiento anterior se interrumpió; se reanudará automáticamente.' })
+    .eq('estado', 'procesando')
+    .lt('procesando_desde', cutoff);
+  const { error: legacyError } = await admin.from('documentos')
+    .update({ estado: 'pendiente', error: 'El procesamiento anterior se interrumpió; se reanudará automáticamente.' })
+    .eq('estado', 'procesando')
+    .is('procesando_desde', null)
+    .lt('recibido_en', cutoff);
+  if (timestampError || legacyError) console.warn('No se pudieron liberar documentos interrumpidos.', timestampError?.message || legacyError?.message);
+}
+
+async function processDocument(admin: any, document: any, apiKey: string, models: string[], thinkingLevel: string): Promise<void> {
+  try {
+    if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(document.mime)) throw new Error('El tipo de archivo del documento no está permitido.');
+    const { data: file, error: downloadError } = await admin.storage.from('documentos-precios').download(document.storage_path);
+    if (downloadError || !file) throw new Error('No se pudo descargar el archivo desde Storage.');
+
+    const geminiStartedAt = Date.now();
+    console.info('Iniciando extracción Gemini.', { documentoId: document.id, mime: document.mime, modelos: models });
+    const { data: extracted, model } = await requestGemini(apiKey, models, document.mime, new Uint8Array(await file.arrayBuffer()), document.mensaje, thinkingLevel);
+    console.info('Extracción Gemini completada.', { documentoId: document.id, durationMs: Date.now() - geminiStartedAt, model });
+
+    const items = normalizarItems(extracted);
+    if (!items.length) throw new Error('No se encontraron precios válidos en el documento.');
+    const saved = await savePrices(admin, document, items);
+    const { error: finishError } = await admin.from('documentos')
+      .update({ estado: 'procesado', error: null, procesado_en: new Date().toISOString(), procesando_desde: null, modelo_ia: model })
+      .eq('id', document.id);
+    if (finishError) throw new Error('Los precios se guardaron, pero no se pudo actualizar el estado del documento.');
+  } catch (cause) {
+    const message = cause instanceof DOMException && cause.name === 'TimeoutError'
+      ? 'Gemini tardó demasiado. Reintenta el documento.'
+      : cause instanceof Error ? cause.message : 'Error al procesar el documento.';
+    console.error('Falló el procesamiento del documento.', { documentoId: document.id, message });
+    await admin.from('documentos').update({ estado: 'error', error: message.slice(0, 1000), procesando_desde: null }).eq('id', document.id);
+  }
+}
+
+function runInBackground(task: Promise<void>) {
+  const runtime = (globalThis as unknown as { EdgeRuntime?: { waitUntil(promise: Promise<unknown>): void } }).EdgeRuntime;
+  if (runtime?.waitUntil) {
+    runtime.waitUntil(task);
+  } else {
+    // Fuera de Supabase la promesa sigue viva mientras el proceso siga corriendo.
+    task.catch((error) => console.error('Procesamiento en segundo plano fallido.', error));
+  }
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return json({ error: 'Método no permitido.' }, 405);
@@ -154,8 +255,11 @@ Deno.serve(async (request: Request) => {
   const publishableKey = defaultKey(Deno.env.get('SUPABASE_PUBLISHABLE_KEYS'), Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_PUBLISHABLE_KEY') || undefined);
   const apiKey = Deno.env.get('GEMINI_API_KEY');
   const model = Deno.env.get('GEMINI_MODEL');
+  const fallbackValue = Deno.env.get('GEMINI_FALLBACK_MODELS');
+  const models = resolveModels(model, fallbackValue, DEFAULT_FALLBACK_MODELS);
+  const thinkingLevel = (Deno.env.get('GEMINI_THINKING_LEVEL') || 'LOW').trim().toUpperCase();
   if (!url || !secretKey || !publishableKey) return json({ error: 'Falta la configuración segura de Supabase en Edge Functions.' }, 503);
-  if (!apiKey || !model) return json({ error: 'Configura GEMINI_API_KEY y GEMINI_MODEL para procesar documentos.' }, 503);
+  if (!apiKey || !models.length) return json({ error: 'Configura GEMINI_API_KEY y GEMINI_MODEL para procesar documentos.' }, 503);
   if (!(await callerIsAdmin(request, url, secretKey, publishableKey))) return json({ error: 'Solo administración puede iniciar el procesamiento.' }, 403);
 
   const body = await request.json().catch(() => null);
@@ -163,8 +267,9 @@ Deno.serve(async (request: Request) => {
   if (!Number.isSafeInteger(documentId) || documentId <= 0) return json({ error: 'Indica un documento válido.' }, 400);
 
   const admin = createClient(url, secretKey, { auth: { autoRefreshToken: false, persistSession: false } });
+  await releaseStaleDocuments(admin);
   const { data: document, error: documentError } = await admin.from('documentos')
-    .select('id,storage_path,nombre_archivo,mime,mensaje,proveedor_id,estado,intentos')
+    .select('id,storage_path,nombre_archivo,mime,mensaje,proveedor_id,estado,intentos,recibido_en')
     .eq('id', documentId)
     .maybeSingle();
   if (documentError || !document) return json({ error: 'No se encontró el documento.' }, 404);
@@ -172,7 +277,7 @@ Deno.serve(async (request: Request) => {
   if (document.estado === 'procesando') return json({ status: 'procesando', omitido: true }, 202);
 
   const { data: claimed, error: startError } = await admin.from('documentos')
-    .update({ estado: 'procesando', error: null, intentos: Number(document.intentos || 0) + 1 })
+    .update({ estado: 'procesando', error: null, procesando_desde: new Date().toISOString(), intentos: Number(document.intentos || 0) + 1 })
     .eq('id', documentId)
     .in('estado', ['pendiente', 'error'])
     .select('id')
@@ -180,26 +285,7 @@ Deno.serve(async (request: Request) => {
   if (startError) return json({ error: 'No se pudo iniciar el procesamiento.' }, 500);
   if (!claimed) return json({ status: 'procesando', omitido: true }, 202);
 
-  try {
-    if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(document.mime)) throw new Error('El tipo de archivo del documento no está permitido.');
-    const { data: file, error: downloadError } = await admin.storage.from('documentos-precios').download(document.storage_path);
-    if (downloadError || !file) throw new Error('No se pudo descargar el archivo desde Storage.');
-    const geminiStartedAt = Date.now();
-    console.info('Iniciando extracción Gemini.', { documentoId: document.id, mime: document.mime, model });
-    const extracted = await requestGemini(apiKey, model, document.mime, new Uint8Array(await file.arrayBuffer()), document.mensaje);
-    console.info('Extracción Gemini completada.', { documentoId: document.id, durationMs: Date.now() - geminiStartedAt });
-    const items = normalizarItems(extracted);
-    if (!items.length) throw new Error('No se encontraron precios válidos en el documento.');
-    const saved = await savePrices(admin, document, items);
-    const { error: finishError } = await admin.from('documentos').update({ estado: 'procesado', error: null, procesado_en: new Date().toISOString(), modelo_ia: model }).eq('id', documentId);
-    if (finishError) throw new Error('Los precios se guardaron, pero no se pudo actualizar el estado del documento.');
-    return json({ status: 'procesado', precios: saved });
-  } catch (cause) {
-    const message = cause instanceof DOMException && cause.name === 'TimeoutError'
-      ? 'Gemini tardó demasiado. Reintenta el documento.'
-      : cause instanceof Error ? cause.message : 'Error al procesar el documento.';
-    console.error('Falló el procesamiento del documento.', { documentoId: document.id, message });
-    await admin.from('documentos').update({ estado: 'error', error: message.slice(0, 1000) }).eq('id', documentId);
-    return json({ error: message }, 422);
-  }
+  // La respuesta vuelve de inmediato: la bandeja consulta el estado hasta que termine.
+  runInBackground(processDocument(admin, document, apiKey, models, thinkingLevel));
+  return json({ status: 'procesando', documento_id: documentId }, 202);
 });
