@@ -7,16 +7,16 @@ type PriceRow = {
   precio_id: number; categoria: string; producto_id: number; marca: string | null; modelo: string | null; nombre: string;
   especificaciones: Record<string, unknown> | null; proveedor: string | null; tipo: 'lista' | 'promocion'; precio: number;
   moneda: 'GTQ' | 'USD'; incluye_iva: boolean | null; vigente_desde: string; vigente_hasta: string | null;
-  dias_restantes: number | null; condiciones: string | null; documento_id: number | null; es_mejor_precio: boolean;
+  dias_restantes: number | null; condiciones: string | null; documento_id: number | null; es_mejor_precio: boolean; costo_compra: number | null; precio_configurado: boolean;
 };
-type HistoryRow = { id: number; precio: number; moneda: 'GTQ' | 'USD'; proveedor_id: number | null; tipo: string; incluye_iva: boolean | null; vigente_desde: string; vigente_hasta: string | null; condiciones: string | null; documento_id: number | null };
+type HistoryRow = { precio_id: number; precio: number | null; costo_compra: number | null; moneda: 'GTQ' | 'USD'; proveedor: string | null; tipo: string; incluye_iva: boolean | null; vigente_desde: string; vigente_hasta: string | null; condiciones: string | null; documento_id: number | null };
 type Choice = { id: number; nombre: string };
 
 const currency = (amount: number, code: 'GTQ' | 'USD') => new Intl.NumberFormat('es-GT', { style: 'currency', currency: code }).format(Number(amount));
 const date = (value: string) => new Intl.DateTimeFormat('es-GT', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00`));
 const ageInDays = (value: string) => Math.floor((new Date().setHours(0, 0, 0, 0) - new Date(`${value}T12:00:00`).getTime()) / 86400000);
 
-export default function PricesCatalog() {
+export default function PricesCatalog({ role }: { role: 'admin' | 'ventas' }) {
   const supabase = useMemo(() => createClient(), []);
   const [rows, setRows] = useState<PriceRow[]>([]);
   const [categories, setCategories] = useState<Choice[]>([]);
@@ -55,13 +55,13 @@ export default function PricesCatalog() {
 
   async function openProduct(row: PriceRow) {
     setSelected(row); setHistory([]); setHistoryLoading(true); setError('');
-    const result = await supabase.from('precios').select('id,precio,moneda,proveedor_id,tipo,incluye_iva,vigente_desde,vigente_hasta,condiciones,documento_id')
-      .eq('producto_id', row.producto_id).eq('estado', 'aprobado').order('vigente_desde', { ascending: false });
+    const result = await supabase.from('historial_precios').select('precio_id,precio,costo_compra,moneda,proveedor,tipo,incluye_iva,vigente_desde,vigente_hasta,condiciones,documento_id')
+      .eq('producto_id', row.producto_id).order('vigente_desde', { ascending: false });
     if (result.error) setError('No se pudo cargar el historial de este producto.');
     else {
       const items = (result.data || []) as HistoryRow[];
       setHistory(items);
-      const documentIds = Array.from(new Set(items.map((item) => item.documento_id).filter((id): id is number => id !== null)));
+      const documentIds = role === 'admin' ? Array.from(new Set(items.map((item) => item.documento_id).filter((id): id is number => id !== null))) : [];
       if (documentIds.length) {
         const { data } = await supabase.from('documentos').select('id,storage_path').in('id', documentIds);
         const paths = new Map((data || []).map((document) => [document.id, document.storage_path]));
@@ -94,7 +94,8 @@ export default function PricesCatalog() {
           <span className="price-card-top"><span>{row.categoria}</span>{row.tipo === 'promocion' && <span className="price-promo-badge">Promoción</span>}</span>
           <b className="price-product-name">{[row.marca, row.modelo].filter(Boolean).join(' ') || row.nombre}</b>
           {row.nombre !== [row.marca, row.modelo].filter(Boolean).join(' ') && <span className="price-product-description">{row.nombre}</span>}
-          <span className="price-amount">{currency(row.precio, row.moneda)}</span>
+          <span className="price-amount">{row.precio_configurado ? currency(row.precio, row.moneda) : 'Margen pendiente'}</span>
+          {row.costo_compra !== null && <span className="price-cost">Costo de compra: {currency(row.costo_compra, row.moneda)}</span>}
           <span className="price-provider">{row.proveedor || 'Proveedor sin especificar'}</span>
           <span className="price-badges">{row.es_mejor_precio && <span className="price-best">Mejor precio</span>}{row.dias_restantes !== null && row.dias_restantes >= 0 && <span className={`price-expiry ${row.dias_restantes <= 3 ? 'urgent' : ''}`}>Vence en {row.dias_restantes} {row.dias_restantes === 1 ? 'día' : 'días'}</span>}{row.incluye_iva !== null && <span className="price-tax">{row.incluye_iva ? 'Incluye IVA' : 'Más IVA'}</span>}</span>
           {stale && <small className="price-stale-note">Actualizado hace {ageInDays(row.vigente_desde)} días</small>}
@@ -105,7 +106,7 @@ export default function PricesCatalog() {
     {!loading && rows.length > 0 && <p className="price-result-count">{visibleRows.length} {visibleRows.length === 1 ? 'resultado' : 'resultados'}</p>}
     {selected && <div className="price-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelected(null); }}><section className="price-modal" role="dialog" aria-modal="true" aria-labelledby="price-modal-title">
       <button className="price-modal-close" aria-label="Cerrar" onClick={() => setSelected(null)}>×</button><span className="installation-eyebrow">HISTORIAL DEL PRODUCTO</span><h2 id="price-modal-title">{[selected.marca, selected.modelo].filter(Boolean).join(' ') || selected.nombre}</h2><p className="price-modal-subtitle">{selected.nombre} · {selected.categoria}</p>
-      {historyLoading ? <div className="price-empty">Cargando historial…</div> : <div className="price-history-list">{history.map((item) => <article className="price-history-row" key={item.id}><div><b>{currency(item.precio, item.moneda)}</b><span>{item.tipo === 'promocion' ? 'Promoción' : 'Precio de lista'}{item.incluye_iva !== null ? ` · ${item.incluye_iva ? 'Incluye IVA' : 'Más IVA'}` : ''}</span><small>{providers.find((entry) => entry.id === item.proveedor_id)?.nombre || 'Proveedor sin especificar'}</small><small>Vigente desde {date(item.vigente_desde)}{item.vigente_hasta ? ` hasta ${date(item.vigente_hasta)}` : ''}</small>{item.condiciones && <small>{item.condiciones}</small>}</div>{item.documento_id && documents[item.documento_id] && <a className="installation-primary-link" href={documents[item.documento_id]} target="_blank" rel="noreferrer">Ver documento original</a>}</article>)}{!history.length && <div className="price-empty">No hay historial disponible.</div>}</div>}
+      {historyLoading ? <div className="price-empty">Cargando historial…</div> : <div className="price-history-list">{history.map((item) => <article className="price-history-row" key={item.precio_id}><div>{item.precio !== null ? <b>{currency(item.precio, item.moneda)}</b> : <b>Margen pendiente</b>}{item.costo_compra !== null && <span>Costo de compra: {currency(item.costo_compra, item.moneda)}</span>}<span>{item.tipo === 'promocion' ? 'Promoción' : 'Precio de lista'}{item.incluye_iva !== null ? ` · ${item.incluye_iva ? 'Incluye IVA' : 'Más IVA'}` : ''}</span><small>{item.proveedor || 'Proveedor sin especificar'}</small><small>Vigente desde {date(item.vigente_desde)}{item.vigente_hasta ? ` hasta ${date(item.vigente_hasta)}` : ''}</small>{item.condiciones && <small>{item.condiciones}</small>}</div>{role === 'admin' && item.documento_id && documents[item.documento_id] && <a className="installation-primary-link" href={documents[item.documento_id]} target="_blank" rel="noreferrer">Ver documento original</a>}</article>)}{!history.length && <div className="price-empty">No hay historial disponible.</div>}</div>}
     </section></div>}
   </div>;
 }
