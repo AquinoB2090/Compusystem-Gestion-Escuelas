@@ -1,4 +1,4 @@
-﻿# Fase 5: procesamiento de cotizaciones y margen de venta
+# Fase 5: procesamiento de cotizaciones y margen de venta
 
 Fecha: 17 de noviembre de 2026.
 
