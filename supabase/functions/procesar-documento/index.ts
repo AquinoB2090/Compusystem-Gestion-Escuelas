@@ -61,6 +61,7 @@ async function requestGemini(apiKey: string, model: string, mime: string, bytes:
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+    signal: AbortSignal.timeout(90_000),
     body: JSON.stringify({
       contents: [{ parts: [{ text: contents }, { inline_data: { mime_type: mime, data: toBase64(bytes) } }] }],
       generationConfig: { responseMimeType: 'application/json' },
@@ -168,7 +169,10 @@ Deno.serve(async (request: Request) => {
     if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(document.mime)) throw new Error('El tipo de archivo del documento no está permitido.');
     const { data: file, error: downloadError } = await admin.storage.from('documentos-precios').download(document.storage_path);
     if (downloadError || !file) throw new Error('No se pudo descargar el archivo desde Storage.');
+    const geminiStartedAt = Date.now();
+    console.info('Iniciando extracción Gemini.', { documentoId: document.id, mime: document.mime, model });
     const extracted = await requestGemini(apiKey, model, document.mime, new Uint8Array(await file.arrayBuffer()), document.mensaje);
+    console.info('Extracción Gemini completada.', { documentoId: document.id, durationMs: Date.now() - geminiStartedAt });
     const items = normalizarItems(extracted);
     if (!items.length) throw new Error('No se encontraron precios válidos en el documento.');
     const saved = await savePrices(admin, document, items);
@@ -176,7 +180,10 @@ Deno.serve(async (request: Request) => {
     if (finishError) throw new Error('Los precios se guardaron, pero no se pudo actualizar el estado del documento.');
     return json({ status: 'procesado', precios: saved });
   } catch (cause) {
-    const message = cause instanceof Error ? cause.message : 'Error al procesar el documento.';
+    const message = cause instanceof DOMException && cause.name === 'TimeoutError'
+      ? 'Gemini tardó más de 90 segundos. Reintenta el documento.'
+      : cause instanceof Error ? cause.message : 'Error al procesar el documento.';
+    console.error('Falló el procesamiento del documento.', { documentoId: document.id, message });
     await admin.from('documentos').update({ estado: 'error', error: message.slice(0, 1000) }).eq('id', documentId);
     return json({ error: message }, 422);
   }
