@@ -56,10 +56,20 @@ async function invokeProcessor(url: string, secretKey: string, documentId: numbe
 async function receiveMessage(message: any, admin: any, accessToken: string, graphVersion: string) {
   const senderPhone = typeof message?.from === 'string' ? message.from : '';
   const media = messageFile(message);
-  if (!message?.id || !senderPhone || !media || !acceptedMimes.has(media.mime)) return;
+  if (!message?.id || !senderPhone || !media || !acceptedMimes.has(media.mime)) {
+    console.info('WhatsApp message skipped', JSON.stringify({
+      messageType: typeof message?.type === 'string' ? message.type : 'unknown',
+      mime: media?.mime || null,
+      reason: !message?.id ? 'missing_id' : !senderPhone ? 'missing_sender' : !media ? 'no_supported_attachment' : 'unsupported_mime',
+    }));
+    return;
+  }
 
   const { data: existing } = await admin.from('documentos').select('id').eq('wa_message_id', message.id).maybeSingle();
-  if (existing) return;
+  if (existing) {
+    console.info('WhatsApp duplicate skipped');
+    return;
+  }
   // Existing sender entries can suggest a provider, but never block intake.
   const { data: sender } = await admin.from('remitentes').select('telefono,proveedor_id').eq('telefono', senderPhone).eq('activo', true).maybeSingle();
 
@@ -94,6 +104,7 @@ async function receiveMessage(message: any, admin: any, accessToken: string, gra
     if (insertError?.code === '23505') return;
     throw new Error('No se pudo registrar el mensaje recibido.');
   }
+  console.info('WhatsApp document stored', JSON.stringify({ mime, sizeBytes: file.byteLength }));
   return Number(document.id);
 }
 
@@ -108,6 +119,7 @@ Deno.serve(async (request: Request) => {
   if (request.method === 'GET') {
     const parameters = new URL(request.url).searchParams;
     if (!verifyToken || parameters.get('hub.mode') !== 'subscribe' || parameters.get('hub.verify_token') !== verifyToken) return new Response('Forbidden', { status: 403 });
+    console.info('WhatsApp webhook verification succeeded');
     return new Response(parameters.get('hub.challenge') || '', { status: 200, headers: { 'Content-Type': 'text/plain' } });
   }
   if (request.method !== 'POST') return json({ error: 'Método no permitido.' }, 405);
@@ -119,10 +131,20 @@ Deno.serve(async (request: Request) => {
 
   let payload: any;
   try { payload = JSON.parse(new TextDecoder().decode(rawBody)); } catch { return json({ error: 'El cuerpo no contiene JSON válido.' }, 400); }
+  const entries = Array.isArray(payload?.entry) ? payload.entry : [];
+  const changes = entries.flatMap((entry: any) => Array.isArray(entry?.changes) ? entry.changes : []);
+  const messages = changes.flatMap((change: any) => Array.isArray(change?.value?.messages) ? change.value.messages : []);
+  const summary = {
+    object: typeof payload?.object === 'string' ? payload.object : 'unknown',
+    entries: entries.length,
+    fields: [...new Set(changes.map((change: any) => typeof change?.field === 'string' ? change.field : 'unknown'))],
+    messages: messages.length,
+    messageTypes: [...new Set(messages.map((message: any) => typeof message?.type === 'string' ? message.type : 'unknown'))],
+  };
+  console.info('WhatsApp webhook event', JSON.stringify(summary));
   if (payload?.object !== 'whatsapp_business_account') return json({ received: true, ignored: true });
 
   const admin = createClient(url, secretKey, { auth: { autoRefreshToken: false, persistSession: false } });
-  const messages = (payload.entry || []).flatMap((entry: any) => entry.changes || []).flatMap((change: any) => change.value?.messages || []);
   let intakeFailed = false;
   for (const message of messages) {
     try {
