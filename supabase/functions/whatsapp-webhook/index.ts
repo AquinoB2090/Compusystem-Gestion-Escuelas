@@ -60,8 +60,8 @@ async function receiveMessage(message: any, admin: any, accessToken: string, gra
 
   const { data: existing } = await admin.from('documentos').select('id').eq('wa_message_id', message.id).maybeSingle();
   if (existing) return;
+  // Existing sender entries can suggest a provider, but never block intake.
   const { data: sender } = await admin.from('remitentes').select('telefono,proveedor_id').eq('telefono', senderPhone).eq('activo', true).maybeSingle();
-  if (!sender) return;
 
   const version = graphVersion.replace(/^v/i, '');
   const metadataResponse = await fetch(`https://graph.facebook.com/v${version}/${encodeURIComponent(media.mediaId)}`, { headers: { Authorization: `Bearer ${accessToken}` } });
@@ -83,7 +83,7 @@ async function receiveMessage(message: any, admin: any, accessToken: string, gra
 
   const { data: document, error: insertError } = await admin.from('documentos').insert({
     origen: 'whatsapp', wa_message_id: message.id, remitente_tel: senderPhone,
-    proveedor_id: sender.proveedor_id, storage_path: path, nombre_archivo: media.filename,
+    proveedor_id: sender?.proveedor_id ?? null, storage_path: path, nombre_archivo: media.filename,
     mime, mensaje: media.caption, estado: 'pendiente',
   }).select('id').single();
   if (insertError || !document) {
