@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { AlignmentType, BorderStyle, Document, Packer, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType } from 'docx';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
@@ -19,6 +20,7 @@ type QuoteItem = {
   option_group: string | null;
 };
 type QuoteResult = { message: string; questions: string[]; ready: boolean; items: QuoteItem[] };
+type CatalogProduct = { precio_id: number; producto_id: number; categoria: string; marca: string | null; modelo: string | null; nombre: string; proveedor: string | null; precio: number; moneda: 'GTQ' | 'USD'; condiciones: string | null; precio_configurado: boolean };
 
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guatemala' }).format(new Date());
 const money = (amount: number, currency: 'GTQ' | 'USD') => new Intl.NumberFormat('es-GT', { style: 'currency', currency }).format(amount);
@@ -27,6 +29,10 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
   const supabase = useMemo(() => createClient(), []);
   const [messages, setMessages] = useState<ChatMessage[]>([{ role: 'assistant', content: 'Cuéntame qué productos necesitas y en qué cantidades. Si faltan detalles para elegirlos del catálogo, te haré preguntas.' }]);
   const [items, setItems] = useState<QuoteItem[]>([]);
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState('');
   const [ready, setReady] = useState(false);
   const [customer, setCustomer] = useState('');
   const [nit, setNit] = useState('');
@@ -43,6 +49,22 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
   }));
   const hasAlternatives = groups.length > 1 && groups.some((group) => group.label !== 'Cotización');
   const totalFor = (groupItems: QuoteItem[]) => groupItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+  const visibleCatalog = catalogProducts.filter((product) => [product.marca, product.modelo, product.nombre, product.categoria, product.proveedor].filter(Boolean).join(' ').toLocaleLowerCase('es-GT').includes(catalogSearch.trim().toLocaleLowerCase('es-GT'))).slice(0, 12);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setCatalogLoading(true); setCatalogError('');
+      const { data, error: queryError } = await supabase.from('panel_precios')
+        .select('precio_id,producto_id,categoria,marca,modelo,nombre,proveedor,precio,moneda,condiciones,precio_configurado')
+        .eq('precio_configurado', true).order('nombre').limit(500);
+      if (cancelled) return;
+      if (queryError) setCatalogError('No se pudo cargar el catálogo. Verifica tu acceso e inténtalo de nuevo.');
+      else setCatalogProducts((data || []) as CatalogProduct[]);
+      setCatalogLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [supabase]);
 
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
@@ -53,11 +75,20 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
     setInput(''); setBusy(true); setError(''); setReady(false);
     const { data, error: invokeError } = await supabase.functions.invoke('cotizar', { body: { messages: updatedMessages } });
     if (invokeError || data?.error) {
-      setError(data?.error || 'No se pudo conectar con el asistente. Revisa la configuración e inténtalo de nuevo.');
+      let detail = typeof data?.error === 'string' ? data.error : '';
+      if (invokeError instanceof FunctionsHttpError) {
+        const responseBody = await invokeError.context.clone().json().catch(() => null);
+        if (typeof responseBody?.error === 'string') detail = responseBody.error;
+        else detail ||= `El servicio respondió con un error HTTP ${invokeError.context.status}.`;
+      } else if (invokeError) {
+        detail ||= `No se pudo conectar con el servicio (${invokeError.message}).`;
+      }
+      setError(detail || 'No se pudo completar la solicitud. Inténtalo de nuevo.');
     } else {
       const result = data as QuoteResult;
       setMessages([...updatedMessages, { role: 'assistant' as const, content: result.message }].slice(-12));
-      setItems(result.items || []); setReady(Boolean(result.ready));
+      if (result.items?.length) setItems(result.items);
+      setReady(Boolean(result.ready));
     }
     setBusy(false);
     requestAnimationFrame(() => threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: 'smooth' }));
@@ -68,8 +99,20 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
     setItems((current) => current.map((item) => item.precio_id === priceId && item.option_group === optionGroup ? { ...item, quantity, line_total: quantity * item.unit_price } : item));
   }
 
+  function addCatalogProduct(product: CatalogProduct) {
+    const unitPrice = Number(product.precio);
+    if (!product.precio_configurado || !Number.isFinite(unitPrice) || unitPrice < 0) return;
+    const description = [product.marca, product.modelo, product.nombre].filter((value, index, values) => value && values.indexOf(value) === index).join(' · ');
+    setItems((current) => {
+      const existing = current.find((item) => item.precio_id === product.precio_id && item.option_group === null);
+      if (existing) return current.map((item) => item === existing ? { ...item, quantity: item.quantity + 1, line_total: (item.quantity + 1) * item.unit_price } : item);
+      return [...current, { precio_id: product.precio_id, producto_id: product.producto_id, categoria: product.categoria, descripcion: description, proveedor: product.proveedor, quantity: 1, unit_price: unitPrice, moneda: product.moneda, line_total: unitPrice, condiciones: product.condiciones, option_group: null }];
+    });
+    setReady(true);
+  }
+
   async function downloadWord() {
-    if (!ready || !items.length) return;
+    if (!items.length) return;
     setExporting(true); setError('');
     try {
       const quoteNumber = `COT-${quoteDate.replaceAll('-', '')}-${new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Guatemala', hour12: false }).replaceAll(':', '')}`;
@@ -137,7 +180,7 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
         <small className="quote-chat-note">El bot solo puede usar precios aprobados. Revisa cada borrador antes de descargarlo.</small>
       </section>
       <section className="quote-draft-card" aria-label="Borrador de cotización">
-        <div className="quote-draft-heading"><div><span className="installation-eyebrow">BORRADOR</span><h2>Detalle de cotización</h2></div><span className={`quote-draft-status ${ready ? 'quote-status-ready' : ''}`}>{ready ? 'Listo para revisar' : 'En preparación'}</span></div>
+        <div className="quote-draft-heading"><div><span className="installation-eyebrow">BORRADOR</span><h2>Detalle de cotización</h2></div><span className={`quote-draft-status ${ready ? 'quote-status-ready' : ''}`}>{ready ? 'Listo para revisar' : items.length ? 'Borrador parcial' : 'En preparación'}</span></div>
         <div className="quote-customer-fields"><label>Cliente<input value={customer} onChange={(event) => setCustomer(event.target.value)} placeholder="Nombre del cliente" maxLength={160} /></label><label>NIT <span>Opcional</span><input value={nit} onChange={(event) => setNit(event.target.value)} placeholder="NIT" maxLength={40} /></label></div>
         {!items.length ? <div className="quote-empty"><span>＋</span><b>Aún no hay productos</b><small>Describe lo que necesitas en el chat para empezar.</small></div> : <div className="quote-items-list">
           {groups.map((group) => <section className="quote-option-group" key={group.label}>
@@ -147,7 +190,13 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
           </section>)}
           <small className="quote-no-tax">No se agrega IVA.</small>
         </div>}
-        <button className="quote-download-button" type="button" onClick={downloadWord} disabled={!ready || !items.length || exporting}>{exporting ? 'Creando Word…' : hasAlternatives ? 'Descargar opciones en Word' : 'Descargar cotización Word'}</button>
+        <section className="quote-catalog-picker" aria-label="Agregar productos del catálogo">
+          <div className="quote-picker-heading"><div><b>Agregar productos</b><small>Selecciona productos con precio de venta vigente.</small></div><span>{catalogProducts.length}</span></div>
+          <input className="quote-catalog-search" value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Buscar producto, modelo o marca" aria-label="Buscar en el catálogo" />
+          {catalogLoading ? <small className="quote-catalog-status">Cargando catálogo…</small> : catalogError ? <small className="quote-catalog-status quote-catalog-error">{catalogError}</small> : !visibleCatalog.length ? <small className="quote-catalog-status">No encontramos productos con precio de venta configurado.</small> : <div className="quote-product-grid">{visibleCatalog.map((product) => <article className="quote-product-card" key={product.precio_id}><span>{product.categoria}</span><b>{[product.marca, product.modelo].filter(Boolean).join(' ') || product.nombre}</b>{product.nombre !== [product.marca, product.modelo].filter(Boolean).join(' ') && <small>{product.nombre}</small>}<div><strong>{money(Number(product.precio), product.moneda)}</strong><button type="button" onClick={() => addCatalogProduct(product)}>Agregar</button></div></article>)}</div>}
+          {!catalogLoading && !catalogError && catalogProducts.length > 12 && visibleCatalog.length === 12 && <small className="quote-catalog-status">Mostrando 12 resultados; escribe para filtrar.</small>}
+        </section>
+        <button className="quote-download-button" type="button" onClick={downloadWord} disabled={!items.length || exporting}>{exporting ? 'Creando Word…' : hasAlternatives ? 'Descargar opciones en Word' : 'Descargar cotización Word'}</button>
       </section>
     </div>
   </div>;

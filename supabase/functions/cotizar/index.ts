@@ -20,9 +20,10 @@ type CatalogRow = {
   nombre: string;
   especificaciones: Record<string, unknown> | null;
   proveedor: string | null;
-  precio: number;
+  precio: number | null;
   moneda: 'GTQ' | 'USD';
   condiciones: string | null;
+  precio_configurado: boolean;
 };
 
 function json(body: unknown, status = 200) {
@@ -83,6 +84,7 @@ async function askGemini(apiKey: string, models: string[], messages: { role: 'us
     especificaciones: row.especificaciones,
     proveedor: row.proveedor,
     precio_venta: row.precio,
+    precio_configurado: row.precio_configurado,
     moneda: row.moneda,
     condiciones: row.condiciones,
   }));
@@ -135,7 +137,8 @@ Deno.serve(async (request: Request) => {
   if (!messages) return json({ error: 'La conversación no tiene un formato válido.' }, 400);
 
   const { data: catalogData, error: catalogError } = await session.from('panel_precios')
-    .select('precio_id,producto_id,categoria,marca,modelo,nombre,especificaciones,proveedor,precio,moneda,condiciones')
+    .select('precio_id,producto_id,categoria,marca,modelo,nombre,especificaciones,proveedor,precio,moneda,condiciones,precio_configurado')
+    .eq('precio_configurado', true)
     .order('nombre').limit(MAX_CATALOG);
   if (catalogError) return json({ error: 'No se pudo consultar el catálogo de precios de venta.' }, 500);
   const catalog = (catalogData || []) as CatalogRow[];
@@ -152,7 +155,7 @@ Deno.serve(async (request: Request) => {
     const row = byId.get(Number(candidate?.precio_id));
     const quantity = Number(candidate?.quantity);
     if (!row || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 10000) continue;
-    const unitPrice = Number(row.precio);
+    const unitPrice = row.precio_configurado && row.precio !== null ? Number(row.precio) : NaN;
     if (!Number.isFinite(unitPrice) || unitPrice < 0) continue;
     const description = [row.marca, row.modelo, row.nombre].filter((value, index, values) => value && values.indexOf(value) === index).join(' · ');
     const optionGroup = typeof candidate?.option === 'string' ? candidate.option.trim().slice(0, 80) || null : null;
@@ -161,7 +164,7 @@ Deno.serve(async (request: Request) => {
       previous.quantity += quantity;
       previous.line_total = Math.round(previous.quantity * previous.unit_price * 100) / 100;
     }
-    else items.push({ precio_id: Number(row.precio_id), producto_id: Number(row.producto_id), categoria: row.categoria, descripcion, proveedor: row.proveedor, quantity, unit_price: unitPrice, moneda: row.moneda, line_total: Math.round(quantity * unitPrice * 100) / 100, condiciones: row.condiciones, option_group: optionGroup });
+    else items.push({ precio_id: Number(row.precio_id), producto_id: Number(row.producto_id), categoria: row.categoria, descripcion: description, proveedor: row.proveedor, quantity, unit_price: unitPrice, moneda: row.moneda, line_total: Math.round(quantity * unitPrice * 100) / 100, condiciones: row.condiciones, option_group: optionGroup });
   }
   if (items.some((item) => item.quantity > 10000)) return json({ error: 'La cantidad total de un producto excede el límite.' }, 422);
   const groupNames = [...new Set(items.map((item) => item.option_group || 'Cotización'))];

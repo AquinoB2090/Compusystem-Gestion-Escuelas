@@ -14,6 +14,7 @@ Agregar a Instalaciones un asistente que convierta solicitudes en borradores de 
 - Cuando no se indica cantidad, se prepara una unidad de cada producto y se informa en el mensaje para que la cantidad pueda corregirse.
 - La aplicación valida los IDs devueltos contra los productos consultados y calcula los montos; Gemini nunca devuelve precios autoritativos.
 - El usuario revisa los renglones antes de descargar el Word.
+- Los productos reconocidos permanecen en el borrador mientras el asistente pregunta datos faltantes; se pueden agregar más productos desde tarjetas del catálogo.
 - Los datos de empresa, términos, contacto, validez y numeración final quedan pendientes hasta que el usuario los proporcione.
 
 ## Arquitectura
@@ -32,8 +33,9 @@ No se requiere vectorizar los precios al inicio: son registros estructurados y e
 - [x] Añadir la Edge Function `cotizar` y conectarla con Gemini.
 - [x] Añadir la pantalla de chat y el borrador editable en Instalaciones.
 - [x] Añadir la exportación Word con los campos ya acordados, sin IVA.
+- [x] Añadir tarjetas de productos para agregarlos directamente al borrador y permitir descargar renglones reconocidos aunque haya preguntas pendientes.
 - [x] Presentar todas las alternativas mencionadas en una sola cotización Word, con totales separados por opción.
-- [x] Configurar los secretos de Gemini en Supabase y desplegar la función cuando el usuario lo indique. `cotizar` quedó activa en producción el 2026-11-24 (versión 2; incluye cotizaciones con alternativas).
+- [x] Configurar los secretos de Gemini en Supabase y desplegar la función cuando el usuario lo indique. `cotizar` quedó activa en producción el 2026-11-24 (versión 3; alternativas y cálculo de renglones corregido).
 - [ ] Revisar solicitudes ambiguas, precios vencidos, cantidades inválidas, intentos de pedir precios inexistentes, alternativas con total independiente y usuarios sin rol autorizado.
 - [ ] Incorporar los datos comerciales restantes cuando los proporcione el usuario.
 
