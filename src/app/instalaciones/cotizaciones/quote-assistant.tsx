@@ -16,8 +16,9 @@ type QuoteItem = {
   moneda: 'GTQ' | 'USD';
   line_total: number;
   condiciones: string | null;
+  option_group: string | null;
 };
-type QuoteResult = { message: string; questions: string[]; ready: boolean; items: QuoteItem[]; currency: 'GTQ' | 'USD' | null; subtotal: number; total: number };
+type QuoteResult = { message: string; questions: string[]; ready: boolean; items: QuoteItem[] };
 
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guatemala' }).format(new Date());
 const money = (amount: number, currency: 'GTQ' | 'USD') => new Intl.NumberFormat('es-GT', { style: 'currency', currency }).format(amount);
@@ -27,7 +28,6 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
   const [messages, setMessages] = useState<ChatMessage[]>([{ role: 'assistant', content: 'Cuéntame qué productos necesitas y en qué cantidades. Si faltan detalles para elegirlos del catálogo, te haré preguntas.' }]);
   const [items, setItems] = useState<QuoteItem[]>([]);
   const [ready, setReady] = useState(false);
-  const [currency, setCurrency] = useState<'GTQ' | 'USD' | null>(null);
   const [customer, setCustomer] = useState('');
   const [nit, setNit] = useState('');
   const [input, setInput] = useState('');
@@ -37,8 +37,12 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
   const [quoteDate] = useState(today);
   const threadRef = useRef<HTMLDivElement>(null);
 
-  const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
-  const total = subtotal;
+  const groups = [...new Set(items.map((item) => item.option_group || 'Cotización'))].map((label) => ({
+    label,
+    items: items.filter((item) => (item.option_group || 'Cotización') === label),
+  }));
+  const hasAlternatives = groups.length > 1 && groups.some((group) => group.label !== 'Cotización');
+  const totalFor = (groupItems: QuoteItem[]) => groupItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
 
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
@@ -53,19 +57,19 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
     } else {
       const result = data as QuoteResult;
       setMessages([...updatedMessages, { role: 'assistant' as const, content: result.message }].slice(-12));
-      setItems(result.items || []); setReady(Boolean(result.ready)); setCurrency(result.currency || null);
+      setItems(result.items || []); setReady(Boolean(result.ready));
     }
     setBusy(false);
     requestAnimationFrame(() => threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: 'smooth' }));
   }
 
-  function changeQuantity(priceId: number, raw: string) {
+  function changeQuantity(priceId: number, optionGroup: string | null, raw: string) {
     const quantity = Math.max(1, Math.min(10000, Math.floor(Number(raw) || 1)));
-    setItems((current) => current.map((item) => item.precio_id === priceId ? { ...item, quantity, line_total: quantity * item.unit_price } : item));
+    setItems((current) => current.map((item) => item.precio_id === priceId && item.option_group === optionGroup ? { ...item, quantity, line_total: quantity * item.unit_price } : item));
   }
 
   async function downloadWord() {
-    if (!ready || !items.length || !currency) return;
+    if (!ready || !items.length) return;
     setExporting(true); setError('');
     try {
       const quoteNumber = `COT-${quoteDate.replaceAll('-', '')}-${new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Guatemala', hour12: false }).replaceAll(':', '')}`;
@@ -77,12 +81,24 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
         margins: { top: 110, bottom: 110, left: 120, right: 120 },
         children: [new Paragraph({ alignment: options.align, children: [new TextRun({ text, bold: options.bold, size: 19, font: 'Aptos' })] })],
       });
-      const headerRow = new TableRow({ tableHeader: true, children: [
-        cell('Descripción', { bold: true, fill: 'EEF1F8' }), cell('Cantidad', { bold: true, align: AlignmentType.CENTER, fill: 'EEF1F8' }), cell('Precio unitario', { bold: true, align: AlignmentType.RIGHT, fill: 'EEF1F8' }), cell('Total', { bold: true, align: AlignmentType.RIGHT, fill: 'EEF1F8' }),
-      ] });
-      const dataRows = items.map((item) => new TableRow({ children: [
-        cell(item.descripcion), cell(String(item.quantity), { align: AlignmentType.CENTER }), cell(money(item.unit_price, item.moneda), { align: AlignmentType.RIGHT }), cell(money(item.quantity * item.unit_price, item.moneda), { align: AlignmentType.RIGHT }),
-      ] }));
+      const makeTable = (groupItems: QuoteItem[]) => {
+        const headerRow = new TableRow({ tableHeader: true, children: [
+          cell('Descripción', { bold: true, fill: 'EEF1F8' }), cell('Cantidad', { bold: true, align: AlignmentType.CENTER, fill: 'EEF1F8' }), cell('Precio unitario', { bold: true, align: AlignmentType.RIGHT, fill: 'EEF1F8' }), cell('Total', { bold: true, align: AlignmentType.RIGHT, fill: 'EEF1F8' }),
+        ] });
+        const dataRows = groupItems.map((item) => new TableRow({ children: [
+          cell(item.descripcion), cell(String(item.quantity), { align: AlignmentType.CENTER }), cell(money(item.unit_price, item.moneda), { align: AlignmentType.RIGHT }), cell(money(item.quantity * item.unit_price, item.moneda), { align: AlignmentType.RIGHT }),
+        ] }));
+        return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: [4800, 1000, 2200, 2080], rows: [headerRow, ...dataRows] });
+      };
+      const optionSections = groups.flatMap((group) => {
+        const groupTotal = totalFor(group.items);
+        const groupCurrency = group.items[0].moneda;
+        return [
+          ...(hasAlternatives ? [new Paragraph({ heading: 'Heading2', spacing: { before: 220, after: 100 }, children: [new TextRun({ text: group.label, bold: true, color: '5261C7', size: 25 })] })] : []),
+          makeTable(group.items),
+          new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { before: 90, after: 170 }, children: [new TextRun({ text: `${hasAlternatives ? `Total ${group.label}` : 'Total'}: ${money(groupTotal, groupCurrency)}`, bold: true, size: 23, color: '202747' })] }),
+        ];
+      });
       const document = new Document({
         styles: { default: { document: { run: { font: 'Aptos', size: 21, color: '202747' }, paragraph: { spacing: { after: 100 } } } } },
         sections: [{ properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1080, right: 1080, bottom: 1080, left: 1080 } } }, children: [
@@ -94,9 +110,7 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
           ...(nit.trim() ? [new Paragraph({ children: [new TextRun({ text: 'NIT: ', bold: true }), new TextRun(nit.trim())] })] : []),
           new Paragraph({ children: [new TextRun({ text: 'Asesor: ', bold: true }), new TextRun(salesperson || '________________________________')] }),
           new Paragraph({ text: '' }),
-          new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: [4800, 1000, 2200, 2080], rows: [headerRow, ...dataRows] }),
-          new Paragraph({ text: '' }),
-          new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `Total ${currency}: ${money(total, currency)}`, bold: true, size: 25, color: '202747' })] }),
+          ...optionSections,
           new Paragraph({ text: '' }),
           new Paragraph({ children: [new TextRun({ text: 'Documento borrador sujeto a revisión.', italics: true, color: '7B849A', size: 18 })] }),
         ] }],
@@ -126,10 +140,14 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
         <div className="quote-draft-heading"><div><span className="installation-eyebrow">BORRADOR</span><h2>Detalle de cotización</h2></div><span className={`quote-draft-status ${ready ? 'quote-status-ready' : ''}`}>{ready ? 'Listo para revisar' : 'En preparación'}</span></div>
         <div className="quote-customer-fields"><label>Cliente<input value={customer} onChange={(event) => setCustomer(event.target.value)} placeholder="Nombre del cliente" maxLength={160} /></label><label>NIT <span>Opcional</span><input value={nit} onChange={(event) => setNit(event.target.value)} placeholder="NIT" maxLength={40} /></label></div>
         {!items.length ? <div className="quote-empty"><span>＋</span><b>Aún no hay productos</b><small>Describe lo que necesitas en el chat para empezar.</small></div> : <div className="quote-items-list">
-          {items.map((item) => <article className="quote-item-row" key={item.precio_id}><div className="quote-item-name"><b>{item.descripcion}</b><small>{item.categoria}{item.proveedor ? ` · ${item.proveedor}` : ''}</small>{item.condiciones && <small>{item.condiciones}</small>}</div><label className="quote-quantity">Cant.<input type="number" min={1} max={10000} step={1} value={item.quantity} onChange={(event) => changeQuantity(item.precio_id, event.target.value)} /></label><div className="quote-item-price"><small>{money(item.unit_price, item.moneda)} c/u</small><b>{money(item.quantity * item.unit_price, item.moneda)}</b></div></article>)}
+          {groups.map((group) => <section className="quote-option-group" key={group.label}>
+            {hasAlternatives && <h3 className="quote-option-heading">{group.label}</h3>}
+            {group.items.map((item) => <article className="quote-item-row" key={`${item.precio_id}-${group.label}`}><div className="quote-item-name"><b>{item.descripcion}</b><small>{item.categoria}{item.proveedor ? ` · ${item.proveedor}` : ''}</small>{item.condiciones && <small>{item.condiciones}</small>}</div><label className="quote-quantity">Cant.<input type="number" min={1} max={10000} step={1} value={item.quantity} onChange={(event) => changeQuantity(item.precio_id, item.option_group, event.target.value)} /></label><div className="quote-item-price"><small>{money(item.unit_price, item.moneda)} c/u</small><b>{money(item.quantity * item.unit_price, item.moneda)}</b></div></article>)}
+            <div className="quote-option-total"><span>{hasAlternatives ? `Total ${group.label}` : 'Total'}</span><b>{money(totalFor(group.items), group.items[0].moneda)}</b></div>
+          </section>)}
+          <small className="quote-no-tax">No se agrega IVA.</small>
         </div>}
-        {items.length > 0 && <div className="quote-totals"><div><span>Subtotal</span><b>{currency ? money(subtotal, currency) : '—'}</b></div><div className="quote-total"><span>Total</span><b>{currency ? money(total, currency) : '—'}</b></div><small>No se agrega IVA.</small></div>}
-        <button className="quote-download-button" type="button" onClick={downloadWord} disabled={!ready || !items.length || !currency || exporting}>{exporting ? 'Creando Word…' : 'Descargar cotización Word'}</button>
+        <button className="quote-download-button" type="button" onClick={downloadWord} disabled={!ready || !items.length || exporting}>{exporting ? 'Creando Word…' : hasAlternatives ? 'Descargar opciones en Word' : 'Descargar cotización Word'}</button>
       </section>
     </div>
   </div>;

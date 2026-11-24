@@ -10,6 +10,8 @@ Agregar a Instalaciones un asistente que convierta solicitudes en borradores de 
 - No agregar IVA. El total es la suma de cantidad por precio de venta.
 - No mostrar costos de compra al bot ni al documento.
 - Gemini interpreta la solicitud y pregunta cuando falten datos o la coincidencia no sea clara.
+- Si el cliente menciona alternativas, el bot incluye todas en el borrador, sin pedir que elija una. Cada opción tiene su subtotal y total independientes; nunca se suman productos que sean alternativas entre sí.
+- Cuando no se indica cantidad, se prepara una unidad de cada producto y se informa en el mensaje para que la cantidad pueda corregirse.
 - La aplicación valida los IDs devueltos contra los productos consultados y calcula los montos; Gemini nunca devuelve precios autoritativos.
 - El usuario revisa los renglones antes de descargar el Word.
 - Los datos de empresa, términos, contacto, validez y numeración final quedan pendientes hasta que el usuario los proporcione.
@@ -30,8 +32,9 @@ No se requiere vectorizar los precios al inicio: son registros estructurados y e
 - [x] Añadir la Edge Function `cotizar` y conectarla con Gemini.
 - [x] Añadir la pantalla de chat y el borrador editable en Instalaciones.
 - [x] Añadir la exportación Word con los campos ya acordados, sin IVA.
+- [x] Presentar todas las alternativas mencionadas en una sola cotización Word, con totales separados por opción.
 - [x] Configurar los secretos de Gemini en Supabase y desplegar la función cuando el usuario lo indique. `cotizar` quedó activa en producción el 2026-11-24 (versión 1).
-- [ ] Revisar solicitudes ambiguas, precios vencidos, cantidades inválidas, intentos de pedir precios inexistentes y usuarios sin rol autorizado.
+- [ ] Revisar solicitudes ambiguas, precios vencidos, cantidades inválidas, intentos de pedir precios inexistentes, alternativas con total independiente y usuarios sin rol autorizado.
 - [ ] Incorporar los datos comerciales restantes cuando los proporcione el usuario.
 
 ## Formato inicial del Word
