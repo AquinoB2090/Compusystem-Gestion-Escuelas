@@ -33,7 +33,7 @@ No se requiere vectorizar los precios al inicio: son registros estructurados y e
 - [x] Añadir la pantalla de chat y el borrador editable en Instalaciones.
 - [x] Añadir la exportación Word con los campos ya acordados, sin IVA.
 - [x] Presentar todas las alternativas mencionadas en una sola cotización Word, con totales separados por opción.
-- [x] Configurar los secretos de Gemini en Supabase y desplegar la función cuando el usuario lo indique. `cotizar` quedó activa en producción el 2026-11-24 (versión 1).
+- [x] Configurar los secretos de Gemini en Supabase y desplegar la función cuando el usuario lo indique. `cotizar` quedó activa en producción el 2026-11-24 (versión 2; incluye cotizaciones con alternativas).
 - [ ] Revisar solicitudes ambiguas, precios vencidos, cantidades inválidas, intentos de pedir precios inexistentes, alternativas con total independiente y usuarios sin rol autorizado.
 - [ ] Incorporar los datos comerciales restantes cuando los proporcione el usuario.
 
