@@ -17,6 +17,7 @@
     "@supabase/server": "^1.9.2",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "2.118.0",
+    "docx": "^9.16.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.9",
     "next": "^15.2.4",

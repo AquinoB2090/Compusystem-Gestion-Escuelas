@@ -9,3 +9,7 @@ verify_jwt = false
 [functions.whatsapp-webhook]
 # Meta signs the raw body; the function verifies that signature itself.
 verify_jwt = false
+
+[functions.cotizar]
+# The function validates the caller's JWT and role before querying the catalog.
+verify_jwt = false

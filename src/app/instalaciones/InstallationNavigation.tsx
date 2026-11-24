@@ -9,6 +9,7 @@ export default function InstallationNavigation({ role, name }: { role: Installat
       <nav className="installation-nav" aria-label="NavegaciÃ³n de Instalaciones">
         <Link href="/instalaciones"><span>âŒ‚</span>Resumen</Link>
         <Link href="/instalaciones/precios"><span>â‚²</span>Precios</Link>
+        <Link href="/instalaciones/cotizaciones"><span>Q</span>Cotizaciones</Link>
         {role === 'admin' && <>
           <div className="installation-nav-label">ADMINISTRACIÃ“N</div>
           <Link href="/instalaciones/precios/revision"><span>âœ“</span>RevisiÃ³n</Link>
@@ -27,7 +28,7 @@ export default function InstallationNavigation({ role, name }: { role: Installat
       <form action="/auth/signout" method="post"><button className="installation-logout">Salir</button></form>
     </header>
     <nav className="installation-mobile-nav" aria-label="NavegaciÃ³n de Instalaciones">
-      <Link href="/instalaciones">Resumen</Link><Link href="/instalaciones/precios">Precios</Link>
+      <Link href="/instalaciones">Resumen</Link><Link href="/instalaciones/precios">Precios</Link><Link href="/instalaciones/cotizaciones">Cotizaciones</Link>
       {role === 'admin' && <><Link href="/instalaciones/precios/revision">RevisiÃ³n</Link><Link href="/instalaciones/precios/documentos">Documentos</Link><Link href="/instalaciones/precios/proveedores">Proveedores</Link></>}
     </nav>
   </>;
