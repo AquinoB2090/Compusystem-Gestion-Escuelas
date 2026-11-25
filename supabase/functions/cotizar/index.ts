@@ -1,15 +1,17 @@
 /// <reference lib="deno.ns" />
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { extractCandidateText, resolveModels } from '../_shared/gemini.ts';
+import { DEFAULT_GEMINI_MODELS, extractCandidateText, geminiErrorMessage, isRetryableStatus, parseRetryDelayMs, resolveModels } from '../_shared/gemini.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
-const DEFAULT_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.6-flash'];
 const MAX_HISTORY = 12;
 const MAX_CATALOG = 500;
+const TOTAL_GEMINI_BUDGET_MS = 45_000;
+const ATTEMPT_TIMEOUT_MS = 15_000;
+const MAX_ATTEMPTS_PER_MODEL = 2;
 
 type CatalogRow = {
   precio_id: number;
@@ -89,35 +91,73 @@ async function askGemini(apiKey: string, models: string[], messages: { role: 'us
     moneda: row.moneda,
     condiciones: row.condiciones,
   }));
+  const payload = JSON.stringify({
+    systemInstruction: { parts: [{ text: `${SYSTEM_INSTRUCTIONS}\n\nCatálogo vigente disponible:\n${JSON.stringify(catalogData)}${draft.length ? `\n\nBorrador actual del usuario (consérvalo salvo que pida cambiarlo):\n${JSON.stringify(draft)}` : ''}` }] },
+    contents: messages,
+    generationConfig: { responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: 'LOW' } },
+  });
+  const deadline = Date.now() + TOTAL_GEMINI_BUDGET_MS;
   const failures: string[] = [];
+  let invalidCredentials = false;
+
   for (const model of models) {
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-        signal: AbortSignal.timeout(22_000),
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: `${SYSTEM_INSTRUCTIONS}\n\nCatálogo vigente disponible:\n${JSON.stringify(catalogData)}${draft.length ? `\n\nBorrador actual del usuario (consérvalo salvo que pida cambiarlo):\n${JSON.stringify(draft)}` : ''}` }] },
-          contents: messages,
-          generationConfig: { responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: 'LOW' } },
-        }),
-      });
-      if (!response.ok) {
-        const detail = await response.text();
-        failures.push(`${model}: HTTP ${response.status} ${detail.slice(0, 160)}`);
-        if (response.status === 400 || response.status === 401 || response.status === 403) break;
+
+    for (let attempt = 0; attempt < MAX_ATTEMPTS_PER_MODEL; attempt++) {
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 1_000) break;
+
+      let response: Response;
+      try {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+          signal: AbortSignal.timeout(Math.min(ATTEMPT_TIMEOUT_MS, remainingMs)),
+          body: payload,
+        });
+      } catch (error) {
+        const isTimeout = error instanceof DOMException && error.name === 'TimeoutError';
+        const isNetworkError = error instanceof TypeError;
+        if (!isTimeout && !isNetworkError) {
+          failures.push(`${model}: ${geminiErrorMessage(error instanceof Error ? error.message : 'error inesperado', apiKey)}`);
+          break;
+        }
+        failures.push(`${model}: ${isTimeout ? 'tiempo de espera agotado' : 'sin respuesta'}`);
         continue;
       }
-      const text = extractCandidateText(await response.json());
-      if (!text) throw new Error('Gemini no devolvió contenido.');
-      return parseJson(text);
-    } catch (error) {
-      failures.push(`${model}: ${error instanceof Error ? error.message : 'sin respuesta'}`);
+
+      if (response.ok) {
+        try {
+          const text = extractCandidateText(await response.json());
+          if (!text) throw new Error('Gemini no devolvió contenido.');
+          return parseJson(text);
+        } catch (error) {
+          failures.push(`${model}: ${geminiErrorMessage(error instanceof Error ? error.message : 'respuesta inválida', apiKey)}`);
+          break;
+        }
+      }
+
+      const rawError = await response.text();
+      const detail = geminiErrorMessage(rawError, apiKey);
+      failures.push(`${model}: HTTP ${response.status}${detail ? `: ${detail}` : ''}`);
+      if (!isRetryableStatus(response.status)) {
+        // 401/403 aplican a la clave, no al modelo: no sirve seguir probando.
+        if (response.status === 401 || response.status === 403) invalidCredentials = true;
+        break;
+      }
+      const waitMs = parseRetryDelayMs(rawError, response.headers.get('Retry-After'), attempt);
+      if (Date.now() + waitMs + 1_000 >= deadline) break;
+      console.warn('Gemini está saturado al cotizar; se reintentará.', { model, attempt: attempt + 1, status: response.status, waitMs });
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
     }
+
+    if (invalidCredentials) break;
   }
+
+  const tried = [...new Set(failures.map((failure) => failure.split(':')[0]))].join(', ') || 'ninguno';
+  const lastError = failures[failures.length - 1] || 'sin detalles';
   console.error('Falló la interpretación de una solicitud de cotización.', failures);
-  throw new Error('No se pudo interpretar la solicitud. Inténtalo otra vez en un momento.');
+  throw new Error(`No se pudo interpretar la solicitud. Modelos probados: ${tried}. Último error: ${lastError}`);
 }
 
 Deno.serve(async (request: Request) => {
@@ -127,7 +167,7 @@ Deno.serve(async (request: Request) => {
   const url = Deno.env.get('SUPABASE_URL');
   const publishableKey = defaultKey(Deno.env.get('SUPABASE_PUBLISHABLE_KEYS'), Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_PUBLISHABLE_KEY') || undefined);
   const apiKey = Deno.env.get('GEMINI_API_KEY');
-  const models = resolveModels(Deno.env.get('GEMINI_MODEL'), Deno.env.get('GEMINI_FALLBACK_MODELS'), DEFAULT_MODELS);
+  const models = resolveModels(Deno.env.get('GEMINI_MODEL'), Deno.env.get('GEMINI_FALLBACK_MODELS'), DEFAULT_GEMINI_MODELS);
   if (!url || !publishableKey) return json({ error: 'Falta la configuración segura de Supabase en Edge Functions.' }, 503);
   if (!apiKey || !models.length) return json({ error: 'Configura GEMINI_API_KEY y GEMINI_MODEL en Supabase.' }, 503);
 

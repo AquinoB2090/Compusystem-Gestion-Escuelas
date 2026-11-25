@@ -2,6 +2,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { normalizarItems, type NormalizedPrice } from '../_shared/utils.ts';
 import {
+  DEFAULT_GEMINI_MODELS,
   extractCandidateText,
   geminiErrorMessage,
   isRetryableStatus,
@@ -22,8 +23,6 @@ const ATTEMPT_TIMEOUT_MS = 18_000;
 const STALE_PROCESSING_MS = 10 * 60_000;
 // gemini-3.8-flash piensa en "medium" por defecto; para extraer precios basta con "low".
 const THINKING_LEVELS = ['MINIMAL', 'LOW', 'MEDIUM', 'HIGH', 'XHIGH'];
-// Modelos estables de Gemini API documentados por Google, distintos del modelo principal.
-const DEFAULT_FALLBACK_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.6-flash'];
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -256,7 +255,7 @@ Deno.serve(async (request: Request) => {
   const apiKey = Deno.env.get('GEMINI_API_KEY');
   const model = Deno.env.get('GEMINI_MODEL');
   const fallbackValue = Deno.env.get('GEMINI_FALLBACK_MODELS');
-  const models = resolveModels(model, fallbackValue, DEFAULT_FALLBACK_MODELS);
+  const models = resolveModels(model, fallbackValue, DEFAULT_GEMINI_MODELS);
   const thinkingLevel = (Deno.env.get('GEMINI_THINKING_LEVEL') || 'LOW').trim().toUpperCase();
   if (!url || !secretKey || !publishableKey) return json({ error: 'Falta la configuración segura de Supabase en Edge Functions.' }, 503);
   if (!apiKey || !models.length) return json({ error: 'Configura GEMINI_API_KEY y GEMINI_MODEL para procesar documentos.' }, 503);

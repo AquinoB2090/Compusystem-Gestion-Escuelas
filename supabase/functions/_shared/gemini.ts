@@ -1,5 +1,17 @@
 /// <reference lib="deno.ns" />
 
+/**
+ * Modelos estables y disponibles en la API de Gemini. El orden es la prioridad:
+ * los dos primeros respondieron de forma continua; gemini-3.6-flash queda como
+ * último recurso porque presenta picos de demanda frecuentes.
+ */
+export const DEFAULT_GEMINI_MODELS = [
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
+  'gemini-3.5-flash',
+  'gemini-3.6-flash',
+];
+
 /** Normaliza un nombre de modelo escrito en GEMINI_MODEL. */
 export function normalizeModelName(value: string | null | undefined): string {
   return (value || '')

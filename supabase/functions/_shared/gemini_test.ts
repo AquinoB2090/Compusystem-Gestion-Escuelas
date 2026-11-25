@@ -1,5 +1,5 @@
 /// <reference lib="deno.ns" />
-import { configuredModels, extractCandidateText, geminiErrorMessage, isRetryableStatus, normalizeModelName, parseRetryDelayMs, resolveModels, withFallbackModels } from './gemini.ts';
+import { configuredModels, DEFAULT_GEMINI_MODELS, extractCandidateText, geminiErrorMessage, isRetryableStatus, normalizeModelName, parseRetryDelayMs, resolveModels, withFallbackModels } from './gemini.ts';
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -20,12 +20,11 @@ Deno.test('withFallbackModels agrega respaldos sin duplicar el modelo principal'
 });
 
 Deno.test('resolveModels agrega los respaldos por defecto si el secreto no existe o está vacío', () => {
-  const defaults = ['gemini-3.5-flash-lite', 'gemini-3.6-flash'];
   for (const value of [undefined, null, '', '   ']) {
-    const models = resolveModels('gemini-3.8-flash', value, defaults);
-    assert(models.join(',') === 'gemini-3.8-flash,gemini-3.5-flash-lite,gemini-3.6-flash', 'No se agregaron los modelos por defecto');
+    const models = resolveModels('gemini-3.8-flash', value, DEFAULT_GEMINI_MODELS);
+    assert(models.join(',') === ['gemini-3.8-flash', ...DEFAULT_GEMINI_MODELS].join(','), 'No se agregaron los modelos por defecto');
   }
-  assert(resolveModels('gemini-3.8-flash', 'gemini-3.7-flash', defaults).join(',') === 'gemini-3.8-flash,gemini-3.7-flash', 'No se respetó la lista configurada');
+  assert(resolveModels('gemini-3.8-flash', 'gemini-3.7-flash', DEFAULT_GEMINI_MODELS).join(',') === 'gemini-3.8-flash,gemini-3.7-flash', 'No se respetó la lista configurada');
 });
 
 Deno.test('isRetryableStatus distingue errores transitorios de errores de configuración', () => {
