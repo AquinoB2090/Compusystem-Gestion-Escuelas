@@ -17,7 +17,6 @@ export default function InstallationNavigation({ role, name }: { role: Installat
         </>}
       </nav>
       <div className="installation-sidebar-bottom">
-        {role === 'admin' && <a className="installation-switch" href="/"><span>↗</span>Escuelas y clientes</a>}
         <div className="installation-user"><span>{name.slice(0, 1).toUpperCase()}</span><div><b>{name}</b><small>{role === 'admin' ? 'Administración' : 'Ventas'}</small></div></div>
         <form action="/auth/signout" method="post"><button className="installation-logout">Cerrar sesión</button></form>
       </div>
