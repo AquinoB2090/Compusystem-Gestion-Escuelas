@@ -10,9 +10,9 @@ export default async function InstalacionesLayout({ children }: Readonly<{ child
   const { profile } = await requireInstallationRole();
   return <div className="installation-app">
     <InstallationNavigation role={profile.rol} name={profile.nombre} />
-    <main className="installation-main"><div className="installation-main-inner">
+    <main className="installation-main">
       <ModuleNavbar active="instalaciones" available={profile.rol === 'admin' ? ['escuela', 'instalaciones'] : ['instalaciones']} />
-      {children}
-    </div></main>
+      <div className="installation-main-inner">{children}</div>
+    </main>
   </div>;
 }
