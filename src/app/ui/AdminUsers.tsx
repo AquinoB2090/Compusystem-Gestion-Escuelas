@@ -11,10 +11,41 @@ export default function AdminUsers({ schools }: { schools: { id: number; nombre:
   const [error, setErrorState] = useState(''); const [notice, setNoticeState] = useState(''); const [busy, setBusy] = useState(false);
   const setError = (message: string) => { setErrorState(message); if (message) toast.error(message); };
   const setNotice = (message: string) => { setNoticeState(message); if (message) toast.success(message); };
-  async function load() { const [u,c] = await Promise.all([fetch('/api/usuarios'), fetch('/api/clientes')]); const ud=await u.json(); const cd=await c.json(); if(!u.ok){setError(ud.error||'No se pudieron cargar las cuentas');return;} setUsers(ud.users||[]); setClients(cd.clients||[]); }
+  async function load() {
+    try {
+      const [u,c] = await Promise.all([fetch('/api/usuarios'), fetch('/api/clientes')]);
+      const ud = await u.json().catch(() => ({}));
+      const cd = await c.json().catch(() => ({}));
+      if (!u.ok) { setError(ud.error || 'No se pudieron cargar las cuentas'); return; }
+      if (!c.ok) { setError(cd.error || 'No se pudieron cargar los clientes'); return; }
+      setUsers(Array.isArray(ud.users) ? ud.users : []);
+      setClients(Array.isArray(cd.clients) ? cd.clients : []);
+    } catch {
+      setError('No se pudo cargar la información. Revisa tu conexión.');
+    }
+  }
   useEffect(()=>{void load();},[]);
-  async function create(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); const form=event.currentTarget; setBusy(true);setError('');setNotice(''); const data=Object.fromEntries(new FormData(form).entries()); const response=await fetch('/api/usuarios',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const result=await response.json();setBusy(false);if(!response.ok){setError(result.error||'No se pudo crear la cuenta');return;}form.reset();setNotice(`Cuenta creada. Usuario: ${result.usuario}. Guarda la contraseña ahora; no se podrá volver a consultar.`);await load(); }
-  async function change(event: React.FormEvent<HTMLFormElement>, user: User) { event.preventDefault(); const form=event.currentTarget;const fields=new FormData(form);const password=String(fields.get('password')||'');const usuario=String(fields.get('usuario')||'').trim();if(!password&&!usuario)return;setBusy(true);setError('');const response=await fetch('/api/usuarios',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:user.id,password,usuario})});const result=await response.json();setBusy(false);if(!response.ok){setError(result.error||'No se pudo cambiar la contraseña');return;}form.reset();setNotice(`Datos de acceso actualizados para ${user.usuario}.`); }
+  async function create(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); const form=event.currentTarget; setBusy(true);setError('');setNotice('');
+    const data=Object.fromEntries(new FormData(form).entries());
+    try {
+      const response=await fetch('/api/usuarios',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+      const result=await response.json().catch(() => ({}));
+      if(!response.ok){setError(result.error||'No se pudo crear la cuenta');return;}
+      form.reset();setNotice(`Cuenta creada. Usuario: ${result.usuario}. Guarda la contraseña ahora; no se podrá volver a consultar.`);await load();
+    } catch { setError('No se pudo crear la cuenta. Revisa tu conexión.'); }
+    finally { setBusy(false); }
+  }
+  async function change(event: React.FormEvent<HTMLFormElement>, user: User) {
+    event.preventDefault(); const form=event.currentTarget;const fields=new FormData(form);const password=String(fields.get('password')||'');const usuario=String(fields.get('usuario')||'').trim();if(!password&&!usuario)return;setBusy(true);setError('');
+    try {
+      const response=await fetch('/api/usuarios',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:user.id,password,usuario})});
+      const result=await response.json().catch(() => ({}));
+      if(!response.ok){setError(result.error||'No se pudo cambiar la contraseña');return;}
+      form.reset();setNotice(`Datos de acceso actualizados para ${user.usuario}.`);
+    } catch { setError('No se pudo guardar el acceso. Revisa tu conexión.'); }
+    finally { setBusy(false); }
+  }
   return <><div className="welcome"><div><span className="eyebrow">PANEL DE ADMINISTRACIÓN</span><h1>Usuarios y contraseñas</h1><p>Crea cuentas para clientes, directores, ventas o administración y cambia sus contraseñas.</p></div></div>{error&&<div className="alert error">{error}<button onClick={()=>setError('')}>×</button></div>}{notice&&<div className="alert success">{notice}<button onClick={()=>setNotice('')}>×</button></div>}
     <section className="form-card"><div className="form-heading"><span className="form-icon blue">+</span><div><h2>Crear cuenta</h2><p>Los nombres de usuario deben ser únicos y la contraseña tener 8 caracteres o más.</p></div></div><form className="data-form" onSubmit={create}><label>Nombre<input name="nombre" required/></label><label>Usuario<input name="usuario" required={role!=='director'} minLength={3} maxLength={32} pattern="[a-zA-Z0-9._-]+" value={username} onChange={e=>setUsername(e.target.value)}/></label><label>Contraseña<input name="password" type="password" required minLength={8} autoComplete="new-password"/></label><label>Tipo<select name="rol" value={role} onChange={e=>{const next=e.target.value;setRole(next);if(next==='director'){const school=schools.find(x=>String(x.id)===schoolId);if(school)setUsername(schoolUsername(school.nombre));}}}><option value="cliente">Cliente individual</option><option value="director">Director</option><option value="ventas">Ventas · Instalaciones</option><option value="admin">Administrador</option></select></label><label>Escuela<select name="escuela_id" value={schoolId} onChange={e=>{setSchoolId(e.target.value);if(role==='director'){const school=schools.find(x=>String(x.id)===e.target.value);setUsername(school?schoolUsername(school.nombre):'');}}}><option value="">—</option>{schools.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}</select></label><label>Cliente existente<select name="cliente_id"><option value="">—</option>{clients.map(c=><option key={c.id} value={c.id}>{c.nombre}</option>)}</select></label><label className="wide check-row"><input type="checkbox" name="crear_cliente" value="true"/> Crear un nuevo cliente y vincularlo</label><div className="form-actions wide"><button className="button primary" disabled={busy}>{busy?'Creando…':'Crear usuario'}</button></div></form></section>
     <section className="client-list-section"><div className="section-head"><div><h2>Cuentas existentes</h2><p>Los passwords actuales no se pueden leer; puedes establecer uno nuevo.</p></div></div><div className="client-list">{users.map(user=><article className="client-card" key={user.id}><div className="client-card-head"><div className="school-card-content"><b>{user.nombre}</b><small>{user.usuario} · {user.rol}{user.escuelas?.nombre?` · ${user.escuelas.nombre}`:''}{user.clientes_individuales?.nombre?` · ${user.clientes_individuales.nombre}`:''}</small></div></div><form className="client-consumption-form" onSubmit={e=>change(e,user)}><label>Usuario<input name="usuario" defaultValue={user.usuario} minLength={3} pattern="[a-zA-Z0-9._-]+"/></label><label>Nueva contraseña<input name="password" type="password" minLength={8} autoComplete="new-password" placeholder="Dejar vacío para conservarla"/></label><button className="button secondary" disabled={busy}>Guardar acceso</button></form></article>)}</div></section></>;

@@ -18,6 +18,7 @@ type QuoteItem = {
   line_total: number;
   condiciones: string | null;
   option_group: string | null;
+  addedManually?: boolean;
 };
 type QuoteSuggestion = { precio_id: number; producto_id: number; categoria: string; descripcion: string; proveedor: string | null; precio: number; moneda: 'GTQ' | 'USD'; condiciones: string | null };
 type QuoteResult = { message: string; questions: string[]; ready: boolean; items: QuoteItem[]; suggestions: QuoteSuggestion[] };
@@ -30,6 +31,7 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
   const [messages, setMessages] = useState<ChatMessage[]>([{ role: 'assistant', content: 'Cuéntame qué productos necesitas y en qué cantidades. Si faltan detalles para elegirlos del catálogo, te haré preguntas.' }]);
   const [items, setItems] = useState<QuoteItem[]>([]);
   const [suggestions, setSuggestions] = useState<QuoteSuggestion[]>([]);
+  const [questions, setQuestions] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
   const [customer, setCustomer] = useState('');
   const [nit, setNit] = useState('');
@@ -46,6 +48,7 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
   }));
   const hasAlternatives = groups.length > 1 && groups.some((group) => group.label !== 'Cotización');
   const totalFor = (groupItems: QuoteItem[]) => groupItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+  const hasMixedCurrency = (list: QuoteItem[]) => [...new Set(list.map((item) => item.moneda))].length > 1;
 
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
@@ -53,8 +56,9 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
     if (!content || busy) return;
     const updatedMessages: ChatMessage[] = [...messages, { role: 'user' as const, content }].slice(-12);
     setMessages(updatedMessages);
-    setInput(''); setBusy(true); setError(''); setReady(false); setSuggestions([]);
-    const { data, error: invokeError } = await supabase.functions.invoke('cotizar', { body: { messages: updatedMessages } });
+    setInput(''); setBusy(true); setError(''); setReady(false); setSuggestions([]); setQuestions([]);
+    const draft = items.map(({ precio_id, quantity, option_group, addedManually }) => ({ precio_id, quantity, option: option_group, addedManually: Boolean(addedManually) }));
+    const { data, error: invokeError } = await supabase.functions.invoke('cotizar', { body: { messages: updatedMessages, items: draft } });
     if (invokeError || data?.error) {
       let detail = typeof data?.error === 'string' ? data.error : '';
       if (invokeError instanceof FunctionsHttpError) {
@@ -68,7 +72,14 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
     } else {
       const result = data as QuoteResult;
       setMessages([...updatedMessages, { role: 'assistant' as const, content: result.message }].slice(-12));
-      if (result.items?.length) setItems(result.items);
+      if (result.items?.length) {
+        const returned = result.items as QuoteItem[];
+        const keys = new Set(returned.map((item) => `${item.precio_id}|${item.option_group ?? ''}`));
+        // Los productos agregados desde las tarjetas no deben perderse al
+        // volver a consultar al asistente.
+        setItems([...returned, ...items.filter((item) => item.addedManually && !keys.has(`${item.precio_id}|${item.option_group ?? ''}`))]);
+      }
+      setQuestions(Array.isArray(result.questions) ? result.questions : []);
       setSuggestions(result.suggestions || []);
       setReady(Boolean(result.ready));
     }
@@ -84,16 +95,18 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
   function addSuggestedProduct(product: QuoteSuggestion) {
     const unitPrice = Number(product.precio);
     if (!Number.isFinite(unitPrice) || unitPrice < 0) return;
-    setItems((current) => {
-      const existing = current.find((item) => item.precio_id === product.precio_id && item.option_group === null);
-      if (existing) return current.map((item) => item === existing ? { ...item, quantity: item.quantity + 1, line_total: (item.quantity + 1) * item.unit_price } : item);
-      return [...current, { precio_id: product.precio_id, producto_id: product.producto_id, categoria: product.categoria, descripcion: product.descripcion, proveedor: product.proveedor, quantity: 1, unit_price: unitPrice, moneda: product.moneda, line_total: unitPrice, condiciones: product.condiciones, option_group: null }];
-    });
-    setReady(true);
+    const existing = items.find((item) => item.precio_id === product.precio_id && item.option_group === null);
+    const next = existing
+      ? items.map((item) => item === existing ? { ...item, quantity: item.quantity + 1, line_total: (item.quantity + 1) * item.unit_price, addedManually: true } : item)
+      : [...items, { precio_id: product.precio_id, producto_id: product.producto_id, categoria: product.categoria, descripcion: product.descripcion, proveedor: product.proveedor, quantity: 1, unit_price: unitPrice, moneda: product.moneda, line_total: unitPrice, condiciones: product.condiciones, option_group: null, addedManually: true }];
+    setItems(next);
+    setReady(!hasMixedCurrency(next));
+    setError(hasMixedCurrency(next) ? 'Una misma cotización no puede mezclar GTQ y USD.' : '');
   }
 
   async function downloadWord() {
     if (!items.length) return;
+    if (hasMixedCurrency(items)) { setError('Una misma cotización no puede mezclar GTQ y USD.'); return; }
     setExporting(true); setError('');
     try {
       const quoteNumber = `COT-${quoteDate.replaceAll('-', '')}-${new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Guatemala', hour12: false }).replaceAll(':', '')}`;
@@ -157,6 +170,7 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
           {busy && <div className="quote-bubble quote-thinking">Buscando en el catálogo…</div>}
         </div>
         {error && <div className="quote-error" role="alert">{error}</div>}
+        {questions.length > 0 && <ul className="quote-questions" aria-label="Preguntas del asistente">{questions.map((question, index) => <li key={`${index}-${question}`}>{question}</li>)}</ul>}
         <form className="quote-composer" onSubmit={sendMessage}><textarea aria-label="Describe lo que necesitas" value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ejemplo: necesito 4 cámaras para exterior, 4 MP…" rows={2} maxLength={2000} disabled={busy} /><button type="submit" disabled={busy || !input.trim()} aria-label="Enviar solicitud">{busy ? '…' : '↑'}</button></form>
         <small className="quote-chat-note">El bot solo puede usar precios aprobados. Revisa cada borrador antes de descargarlo.</small>
       </section>

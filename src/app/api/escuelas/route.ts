@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   const { data: { user } } = await session.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Inicia sesión para continuar.' }, { status: 401 });
 
-  const { data: profile } = await session.from('perfiles').select('rol').eq('id', user.id).single();
+  const { data: profile } = await session.from('perfiles').select('rol').eq('id', user.id).eq('activo', true).single();
   if (profile?.rol !== 'admin') return NextResponse.json({ error: 'Solo administración puede agregar escuelas.' }, { status: 403 });
 
   const body = await request.json().catch(() => null);
@@ -29,7 +29,8 @@ export async function POST(request: Request) {
   const admin = serviceClient();
   if (!admin) return NextResponse.json({ error: 'Falta configurar SUPABASE_SECRET_KEY en el servidor.' }, { status: 503 });
 
-  const schoolValues = { nombre, activa: true };
+  const activa = body?.activa === undefined ? true : body?.activa === true || body?.activa === 'true';
+  const schoolValues = { nombre, activa };
   const { data: school, error: schoolError } = await admin.from('escuelas').insert(schoolValues).select('id,nombre').single();
   if (schoolError || !school) return NextResponse.json({ error: schoolError?.message || 'No se pudo crear la escuela.' }, { status: 400 });
 
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
   let username = baseUsername;
   let suffix = 2;
   while (true) {
-    const { data: duplicate, error: lookupError } = await admin.from('perfiles').select('id').ilike('usuario', username).maybeSingle();
+    const { data: duplicate, error: lookupError } = await admin.from('perfiles').select('id').eq('usuario', username).maybeSingle();
     if (lookupError) { await admin.from('escuelas').delete().eq('id', school.id); return NextResponse.json({ error: lookupError.message }, { status: 500 }); }
     if (!duplicate) break;
     const ending = String(suffix++); username = `${baseUsername.slice(0, 32 - ending.length)}${ending}`;

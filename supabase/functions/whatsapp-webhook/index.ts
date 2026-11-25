@@ -70,8 +70,12 @@ async function receiveMessage(message: any, admin: any, accessToken: string, gra
     console.info('WhatsApp duplicate skipped');
     return;
   }
-  // Existing sender entries can suggest a provider, but never block intake.
-  const { data: sender } = await admin.from('remitentes').select('telefono,proveedor_id').eq('telefono', senderPhone).eq('activo', true).maybeSingle();
+  // Solo se aceptan documentos de remitentes registrados y activos.
+  const { data: sender, error: senderError } = await admin.from('remitentes').select('telefono,proveedor_id').eq('telefono', senderPhone).eq('activo', true).maybeSingle();
+  if (senderError || !sender) {
+    console.info('WhatsApp message skipped', JSON.stringify({ reason: senderError?.message || 'sender_not_allowed' }));
+    return;
+  }
 
   const version = graphVersion.replace(/^v/i, '');
   const metadataResponse = await fetch(`https://graph.facebook.com/v${version}/${encodeURIComponent(media.mediaId)}`, { headers: { Authorization: `Bearer ${accessToken}` } });

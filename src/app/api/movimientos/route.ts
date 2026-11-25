@@ -6,7 +6,7 @@ export async function PATCH(request: Request) {
   const session = await createClient();
   const { data: { user } } = await session.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Inicia sesión para continuar.' }, { status: 401 });
-  const { data: profile } = await session.from('perfiles').select('rol').eq('id', user.id).single();
+  const { data: profile } = await session.from('perfiles').select('rol').eq('id', user.id).eq('activo', true).single();
   if (profile?.rol !== 'admin') return NextResponse.json({ error: 'Solo administración puede editar movimientos.' }, { status: 403 });
 
   const body = await request.json().catch(() => null);
@@ -26,12 +26,13 @@ export async function PATCH(request: Request) {
   const table = tipo === 'consumo' ? 'consumos' : 'asignaciones';
   const values: Record<string, string | number> = tipo === 'consumo'
     ? { fecha: String(body?.fecha || ''), catedratico: String(body?.descripcion || body?.catedratico || '').trim(), descripcion: String(cantidad), monto: unidad === 'fotocopias' ? cantidad / 4 : cantidad, unidad }
-    : { monto: cantidad / 4, unidad_ingresada: 'fotocopias' };
+    : { monto: unidad === 'quetzales' ? cantidad : cantidad / 4, unidad_ingresada: unidad };
   if (tipo === 'consumo' && (!String(values.fecha || '') || !String(values.catedratico || '') || !/^\d{4}-\d{2}-\d{2}$/.test(String(values.fecha || '')))) {
     return NextResponse.json({ error: 'Completa una fecha válida y una descripción.' }, { status: 400 });
   }
-  const { error } = await admin.from(table).update(values).eq('id', id);
+  const { data: updated, error } = await admin.from(table).update(values).eq('id', id).select('id');
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (!updated?.length) return NextResponse.json({ error: 'No se encontró el movimiento.' }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
 

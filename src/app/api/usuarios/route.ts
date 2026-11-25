@@ -13,7 +13,7 @@ async function authorizedAdmin() {
   const session = await createClient();
   const { data: { user } } = await session.auth.getUser();
   if (!user) return { error: NextResponse.json({ error: 'Inicia sesión para continuar.' }, { status: 401 }) };
-  const { data: profile } = await session.from('perfiles').select('rol').eq('id', user.id).single();
+  const { data: profile } = await session.from('perfiles').select('rol').eq('id', user.id).eq('activo', true).single();
   if (profile?.rol !== 'admin') return { error: NextResponse.json({ error: 'Solo administración puede gestionar usuarios.' }, { status: 403 }) };
   const admin = serviceClient();
   if (!admin) return { error: NextResponse.json({ error: 'Falta configurar la clave secreta de Supabase en el servidor.' }, { status: 503 }) };
@@ -50,11 +50,11 @@ export async function POST(request: Request) {
     const { data: school, error: schoolError } = await access.admin.from('escuelas').select('nombre').eq('id', schoolId).single();
     if (schoolError || !school) return NextResponse.json({ error: 'No se encontró la escuela elegida.' }, { status: 404 });
     const base = normalizeUsername(school.nombre); username = base; let suffix = 2;
-    while (true) { const { data: duplicate, error: lookupError } = await access.admin.from('perfiles').select('id').ilike('usuario', username).maybeSingle(); if (lookupError) return NextResponse.json({ error: lookupError.message }, { status: 500 }); if (!duplicate) break; const ending=String(suffix++); username=`${base.slice(0,32-ending.length)}${ending}`; }
+    while (true) { const { data: duplicate, error: lookupError } = await access.admin.from('perfiles').select('id').eq('usuario', username).maybeSingle(); if (lookupError) return NextResponse.json({ error: lookupError.message }, { status: 500 }); if (!duplicate) break; const ending=String(suffix++); username=`${base.slice(0,32-ending.length)}${ending}`; }
   }
   if (!/^[a-z0-9._-]{3,32}$/.test(username)) return NextResponse.json({ error: 'El nombre de escuela no produce un usuario válido. Cambia el nombre de escuela.' }, { status: 400 });
 
-  const { data: duplicate } = await access.admin.from('perfiles').select('id').ilike('usuario', username).limit(1).maybeSingle();
+  const { data: duplicate } = await access.admin.from('perfiles').select('id').eq('usuario', username).limit(1).maybeSingle();
   if (duplicate) return NextResponse.json({ error: 'Ese usuario ya existe.' }, { status: 409 });
 
   let createdClientId: number | null = null;
@@ -100,16 +100,21 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Escribe un usuario válido o una contraseña de al menos 8 caracteres.' }, { status: 400 });
   }
   if (username) {
-    const { data: duplicate } = await access.admin.from('perfiles').select('id').ilike('usuario', username).neq('id', id).limit(1).maybeSingle();
+    const { data: duplicate } = await access.admin.from('perfiles').select('id').eq('usuario', username).neq('id', id).limit(1).maybeSingle();
     if (duplicate) return NextResponse.json({ error: 'Ese usuario ya está en uso.' }, { status: 409 });
+  }
+  const { data: current } = await access.admin.from('perfiles').select('usuario').eq('id', id).maybeSingle();
+  if (username) {
+    const { error } = await access.admin.from('perfiles').update({ usuario: username }).eq('id', id).select('id');
+    if (error || !current) return NextResponse.json({ error: error?.message || 'No se encontró la cuenta.' }, { status: error ? 400 : 404 });
   }
   if (password) {
     const { error } = await access.admin.auth.admin.updateUserById(id, { password });
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  }
-  if (username) {
-    const { error } = await access.admin.from('perfiles').update({ usuario: username }).eq('id', id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      // No dejar el usuario a medias si el cambio de contraseña falla.
+      if (username && current) await access.admin.from('perfiles').update({ usuario: current.usuario }).eq('id', id);
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
   }
   return NextResponse.json({ ok: true });
 }
