@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { requireInstallationRole } from './access';
 
 export default async function InstalacionesPage() {
@@ -19,11 +18,11 @@ export default async function InstalacionesPage() {
     {hasError && <div className="installation-alert" role="status">No se pudieron cargar algunos indicadores. Puedes abrir las secciones para volver a intentar.</div>}
     <section className={`installation-metrics ${profile.rol === 'ventas' ? 'installation-metrics-sales' : ''}`} aria-label="Indicadores">
       {profile.rol === 'admin' && <>
-        <Link className="installation-metric" href="/instalaciones/precios/revision"><span className="installation-metric-icon metric-review">✓</span><span className="installation-metric-label">Precios por revisar</span><b>{reviewCount}</b><small>A la espera de aprobación</small></Link>
-        <Link className="installation-metric" href="/instalaciones/precios/documentos"><span className="installation-metric-icon metric-error">!</span><span className="installation-metric-label">Documentos con error</span><b>{errorCount}</b><small>Requieren atención</small></Link>
+        <a className="installation-metric" href="/instalaciones/precios/revision"><span className="installation-metric-icon metric-review">✓</span><span className="installation-metric-label">Precios por revisar</span><b>{reviewCount}</b><small>A la espera de aprobación</small></a>
+        <a className="installation-metric" href="/instalaciones/precios/documentos"><span className="installation-metric-icon metric-error">!</span><span className="installation-metric-label">Documentos con error</span><b>{errorCount}</b><small>Requieren atención</small></a>
       </>}
-      <Link className="installation-metric" href="/instalaciones/precios?promociones=1"><span className="installation-metric-icon metric-promo">%</span><span className="installation-metric-label">Promociones por vencer</span><b>{promotions.count ?? 0}</b><small>Vencen en los próximos 7 días</small></Link>
+      <a className="installation-metric" href="/instalaciones/precios?promociones=1"><span className="installation-metric-icon metric-promo">%</span><span className="installation-metric-label">Promociones por vencer</span><b>{promotions.count ?? 0}</b><small>Vencen en los próximos 7 días</small></a>
     </section>
-    <section className="installation-start-card"><div className="installation-start-icon">₲</div><div><span className="installation-eyebrow">CONSULTA DE PRECIOS</span><h2>Encuentra opciones vigentes</h2><p>Compara precios aprobados, revisa promociones y consulta condiciones del proveedor.</p><Link className="installation-primary-link" href="/instalaciones/precios">Abrir precios <span>→</span></Link></div></section>
+    <section className="installation-start-card"><div className="installation-start-icon">₲</div><div><span className="installation-eyebrow">CONSULTA DE PRECIOS</span><h2>Encuentra opciones vigentes</h2><p>Compara precios aprobados, revisa promociones y consulta condiciones del proveedor.</p><a className="installation-primary-link" href="/instalaciones/precios">Abrir precios <span>→</span></a></div></section>
   </div>;
 }
