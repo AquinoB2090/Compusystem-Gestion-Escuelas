@@ -5,7 +5,7 @@ import { firmaValida } from '../_shared/utils.ts';
 declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 
 const acceptedMimes = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
-const maxFileBytes = 15 * 1024 * 1024;
+const maxFileBytes = 150 * 1024 * 1024;
 
 function defaultSecret(jsonValue: string | undefined, fallback: string | undefined): string | null {
   if (fallback) return fallback;
@@ -88,7 +88,7 @@ async function receiveMessage(message: any, admin: any, accessToken: string, gra
   const fileResponse = await fetch(metadata.url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!fileResponse.ok) throw new Error('No se pudo descargar el archivo desde Meta.');
   const file = new Uint8Array(await fileResponse.arrayBuffer());
-  if (!file.byteLength || file.byteLength > maxFileBytes) throw new Error('El archivo recibido excede 15 MB o está vacío.');
+  if (!file.byteLength || file.byteLength > maxFileBytes) throw new Error('El archivo recibido excede 150 MB o está vacío.');
 
   const { year, month } = pathParts();
   const path = `whatsapp/${year}/${month}/${crypto.randomUUID()}-${safeFilename(media.filename, `cotizacion-${message.id}.pdf`)}`;

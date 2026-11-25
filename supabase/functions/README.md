@@ -22,7 +22,7 @@ La función reintenta `429` y `5xx` con espera exponencial, respeta `Retry-After
 
 ## WhatsApp
 
-`whatsapp-webhook` verifica `x-hub-signature-256`, acepta documentos PDF/JPEG/PNG/WebP de cualquier número hasta 15 MB y deduplica por `wa_message_id`. Las filas existentes en `public.remitentes` solo sirven para sugerir un proveedor; no filtran quién puede enviar. La configuración tiene `verify_jwt = false` para que Meta pueda entregar el webhook; el endpoint valida la firma con `META_APP_SECRET`.
+`whatsapp-webhook` verifica `x-hub-signature-256`, acepta documentos PDF/JPEG/PNG/WebP de cualquier número hasta 150 MB y deduplica por `wa_message_id`. Las filas existentes en `public.remitentes` solo sirven para sugerir un proveedor; no filtran quién puede enviar. La configuración tiene `verify_jwt = false` para que Meta pueda entregar el webhook; el endpoint valida la firma con `META_APP_SECRET`.
 
 La función está escrita pero no se despliega ni se activa en esta fase. Primero hay que conectar el número en WhatsApp Business, definir `WHATSAPP_VERIFY_TOKEN`, `META_APP_SECRET`, `META_ACCESS_TOKEN` y `META_GRAPH_API_VERSION`, y registrar la URL del webhook en Meta.
 

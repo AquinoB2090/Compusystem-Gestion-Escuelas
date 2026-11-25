@@ -9,7 +9,7 @@ Fecha: 2026-11-17
 - Se agregó la creación de usuarios con rol `ventas` al flujo administrativo.
 - `/instalaciones/precios` consulta `panel_precios`, permite buscar y filtrar, presenta etiquetas de precio/promoción/vigencia/IVA, abre historial y genera enlaces firmados al documento original.
 - Revisión permite aprobar, corregir y aprobar, descartar y aprobar en lote solo los elementos seleccionados. Los registros con confianza menor a 0.8 se resaltan.
-- Documentos muestra su estado, permite reintentar los que fallaron y subir PDF/JPG/PNG/WebP de hasta 15 MB al bucket privado.
+- Documentos muestra su estado, permite reintentar los que fallaron y subir PDF/JPG/PNG/WebP de hasta 150 MB al bucket privado.
 - Proveedores y remitentes permiten crear, editar y desactivar; no se implementó borrado.
 - Las consultas desde el navegador usan la sesión del usuario; no se usa `service_role` en los componentes.
 

@@ -9,7 +9,7 @@ Las cotizaciones contienen costo de compra. Administración configura un porcent
 ## Cambios
 
 - Se añadió la función `procesar-documento`: valida rol admin, reclama documentos pendientes, obtiene el archivo del bucket privado, analiza PDF/imágenes con Gemini, valida la respuesta y guarda precios en `por_revisar` mediante `upsert_producto`.
-- Se añadió `whatsapp-webhook`: verifica Meta HMAC, acepta solo remitentes activos y PDF/JPEG/PNG/WebP hasta 15 MB, deduplica mensajes y deriva el documento al procesador.
+- Se añadió `whatsapp-webhook`: verifica Meta HMAC, acepta solo remitentes activos y PDF/JPEG/PNG/WebP hasta 150 MB, deduplica mensajes y deriva el documento al procesador.
 - La subida manual y el reintento de documentos invocan el procesador.
 - El nombre del modelo Gemini y las credenciales externas quedan vacíos en el ejemplo local. No se desplegaron las funciones ni se activó WhatsApp.
 - Se añadió la migración `margen_global_produccion.sql` y el rollback seguro del margen `desactivar_margen_global.sql`.

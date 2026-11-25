@@ -245,7 +245,8 @@ Hazla en una rama o carpeta propia, sin tocar las pantallas actuales salvo el me
 ### 9.4 `/instalaciones/precios/documentos` (solo admin): bandeja
 - Lista de `documentos` con su estado (`pendiente`, `procesando`, `procesado`, `error`) y el mensaje de error si lo hay.
 - **Reintentar**: `update documentos set estado = 'pendiente'` donde estado = `error`.
-- **Subir archivo**: validar en el cliente tipo (`application/pdf`, `image/jpeg`, `image/png`, `image/webp`) y tamaño (máx. 15 MB). Subir al bucket `documentos-precios` con la sesión del admin en `manual/AAAA/MM/<uuid>-<nombre-seguro>`, y luego insertar la fila en `documentos` con `origen = 'manual'`, `storage_path`, `mime`, `nombre_archivo` y `proveedor_id` elegido. El resto lo hace la función `procesar-documento`.
+- **Subir archivo**: validar en el cliente tipo (`application/pdf`, `image/jpeg`, `image/png`, `image/webp`) y tamaño (máx. 150 MB). Subir al bucket `documentos-precios` con la sesión del admin en `manual/AAAA/MM/<uuid>-<nombre-seguro>`, y luego insertar la fila en `documentos` con `origen = 'manual'`, `storage_path`, `mime`, `nombre_archivo` y `proveedor_id` elegido. El resto lo hace la función `procesar-documento`.
+- La identidad del producto usa marca y modelo (o nombre cuando no hay modelo), ignorando mayúsculas y espacios. Al aprobar una revisión, el precio aprobado más reciente pasa a ser el vigente para ese producto, proveedor y tipo; los precios anteriores se conservan como historial.
 
 ### 9.5 `/instalaciones/precios/proveedores` (solo admin)
 - Alta y edición de `proveedores` y de `remitentes`.

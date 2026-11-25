@@ -129,8 +129,8 @@ create table public.productos (
   creado_en       timestamptz not null default now(),
   -- identifica "el mismo producto" aunque llegue en distintos documentos
   clave           text generated always as (
-                    lower(btrim(coalesce(marca, ''))) || '|' ||
-                    lower(btrim(coalesce(modelo, nombre)))
+                    lower(regexp_replace(btrim(coalesce(marca, '')), '[[:space:]]+', '', 'g')) || '|' ||
+                    lower(regexp_replace(btrim(coalesce(modelo, nombre)), '[[:space:]]+', '', 'g'))
                   ) stored,
   unique (clave)
 );
@@ -301,7 +301,7 @@ create policy staff_select on public.precios     for select
 -- 5. ARCHIVOS (Supabase Storage): bucket privado para los PDF e imágenes
 -- ---------------------------------------------------------------------
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('documentos-precios', 'documentos-precios', false, 15728640,
+values ('documentos-precios', 'documentos-precios', false, 157286400,
         array['application/pdf', 'image/jpeg', 'image/png', 'image/webp'])
 on conflict (id) do nothing;
 
