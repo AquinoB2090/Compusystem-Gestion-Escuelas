@@ -37,7 +37,7 @@ No se requiere vectorizar los precios al inicio: son registros estructurados y e
 - [x] Añadir tarjetas de productos para agregarlos directamente al borrador y permitir descargar renglones reconocidos aunque haya preguntas pendientes.
 - [x] Limitar las tarjetas a sugerencias del asistente y enumerar combos con precios en la respuesta.
 - [x] Presentar todas las alternativas mencionadas en una sola cotización Word, con totales separados por opción.
-- [x] Configurar los secretos de Gemini en Supabase y desplegar la función cuando el usuario lo indique. `cotizar` quedó activa en producción el 2026-11-24 (versión 3; alternativas y cálculo de renglones corregido).
+- [x] Configurar los secretos de Gemini en Supabase y desplegar la función cuando el usuario lo indique. `cotizar` quedó activa en producción el 2026-11-24 (versión 4; sugerencias guiadas y lista de combos).
 - [ ] Revisar solicitudes ambiguas, precios vencidos, cantidades inválidas, intentos de pedir precios inexistentes, alternativas con total independiente y usuarios sin rol autorizado.
 - [ ] Incorporar los datos comerciales restantes cuando los proporcione el usuario.
 
