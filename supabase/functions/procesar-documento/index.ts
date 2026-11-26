@@ -64,9 +64,21 @@ async function callerIsAdmin(request: Request, url: string, secretKey: string, p
   return profile?.rol === 'admin' && profile.activo === true;
 }
 
+const FORMATO_JSON = `Devuelve SOLO JSON válido con esta estructura: {"items":[{"categoria":"Cámaras de seguridad | Aires acondicionados | Accesorios e instalación | Otros","marca":string|null,"modelo":string|null,"nombre":string,"descripcion":string|null,"especificaciones":object,"tipo":"lista"|"promocion","precio":number,"moneda":"GTQ"|"USD","incluye_iva":boolean|null,"vigente_desde":"YYYY-MM-DD"|null,"vigente_hasta":"YYYY-MM-DD"|null,"condiciones":string|null,"confianza":number}]}.
+REGLAS ESTRICTAS: "moneda" debe ser exactamente "GTQ" o "USD" (en Guatemala escribe "GTQ", nunca "Q"); "tipo" debe ser exactamente "lista" o "promocion" (para combos, kits o paquetes usa "promocion"); "categoria" debe ser una de las cuatro opciones indicadas; "especificaciones" debe ser un objeto JSON, nunca texto; "confianza" debe ser un número entre 0 y 1; en los combos deja "modelo" en null y escribe la cantidad de cámaras en "nombre" y en "especificaciones". Usa precios numéricos sin símbolos. Si el documento no contiene precios de productos, responde {"items":[]}.`;
+
 function promptForExtraction(): string {
   return `Analiza este documento de cotización comercial y extrae únicamente productos y precios que aparezcan de forma explícita. Los importes son costos de compra antes de aplicar cualquier margen. No inventes datos: usa null cuando un campo no aparezca.
-Devuelve SOLO JSON válido con esta estructura: {"items":[{"categoria":"Cámaras de seguridad | Aires acondicionados | Accesorios e instalación | Otros","marca":string|null,"modelo":string|null,"nombre":string,"descripcion":string|null,"especificaciones":object,"tipo":"lista"|"promocion","precio":number,"moneda":"GTQ"|"USD","incluye_iva":boolean|null,"vigente_desde":"YYYY-MM-DD"|null,"vigente_hasta":"YYYY-MM-DD"|null,"condiciones":string|null,"confianza":number}]}. Usa precios numéricos sin símbolos, y confianza entre 0 y 1. Si el documento no contiene precios de productos, responde {"items":[]}.`;
+REGLA CRITICA PARA TABLAS, LISTAS Y COMBOS: devuelve un objeto por cada renglon o paquete que tenga su propio precio. Asocia cada precio solo con el texto y las caracteristicas del mismo renglon; no combines el nombre del primer renglon con el precio del ultimo ni reutilices un encabezado como nombre de todos. Si los renglones son paquetes con cantidades distintas (por ejemplo, 2, 4, 6, 8, 10 y 16 camaras), cada cantidad es un producto distinto: incluyela en nombre y especificaciones junto con los canales DVR y almacenamiento que correspondan a ese renglon. Lee todos los renglones de arriba abajo. Si no puedes asociar con seguridad un precio a un paquete, omite ese paquete en vez de adivinar.
+${FORMATO_JSON}`;
+}
+
+function hasCameraCountConflict(items: NormalizedPrice[]): boolean {
+  return items.some((item) => {
+    const namedCount = item.nombre.match(/\b(\d+)\s*c[aá]maras?\b/i);
+    const specifiedCount = Number(item.especificaciones.camaras);
+    return Boolean(namedCount && Number.isFinite(specifiedCount) && Number(namedCount[1]) !== specifiedCount);
+  });
 }
 
 /**
@@ -159,12 +171,17 @@ async function savePrices(admin: any, document: { id: number; proveedor_id: numb
     });
     if (productError || !productId) throw new Error('No se pudo guardar un producto extraído.');
 
-    const { data: existing, error: lookupError } = await admin.from('precios')
+    let pendingQuery = admin.from('precios')
       .select('id,estado')
-      .eq('documento_id', document.id)
       .eq('producto_id', productId)
       .eq('moneda', item.moneda)
       .eq('tipo', item.tipo)
+      .eq('estado', 'por_revisar');
+    pendingQuery = document.proveedor_id === null
+      ? pendingQuery.is('proveedor_id', null)
+      : pendingQuery.eq('proveedor_id', document.proveedor_id);
+    const { data: existing, error: lookupError } = await pendingQuery
+      .order('creado_en', { ascending: false })
       .limit(1)
       .maybeSingle();
     if (lookupError) throw new Error('No se pudo comprobar si el precio ya estaba registrado.');
@@ -216,10 +233,23 @@ async function processDocument(admin: any, document: any, apiKey: string, models
 
     const geminiStartedAt = Date.now();
     console.info('Iniciando extracción Gemini.', { documentoId: document.id, mime: document.mime, modelos: models });
-    const { data: extracted, model } = await requestGemini(apiKey, models, document.mime, new Uint8Array(await file.arrayBuffer()), document.mensaje, thinkingLevel);
+    const fileBytes = new Uint8Array(await file.arrayBuffer());
+    let { data: extracted, model } = await requestGemini(apiKey, models, document.mime, fileBytes, document.mensaje, thinkingLevel);
     console.info('Extracción Gemini completada.', { documentoId: document.id, durationMs: Date.now() - geminiStartedAt, model });
 
-    const items = normalizarItems(extracted);
+    let items = normalizarItems(extracted);
+    if (hasCameraCountConflict(items)) {
+      console.warn('La lectura devolvio cantidades de camaras contradictorias; se repetira la lectura completa.', { documentoId: document.id });
+      const verificationPrompt = `${document.mensaje ? `${document.mensaje}\n\n` : ''}VERIFICACION OBLIGATORIA: la lectura preliminar mezclo cantidades de camaras. Vuelve a leer la imagen completa, cuenta cada recuadro de precio y crea un item por cada combo. Empareja nombre, cantidad de camaras, canales DVR, disco y precio dentro del mismo recuadro. No uses el encabezado ni los datos de otro combo. Si hay varios precios visibles, devuelve todos; no devuelvas un unico resumen.\n${FORMATO_JSON}`;
+      const verified = await requestGemini(apiKey, models, document.mime, fileBytes, verificationPrompt, thinkingLevel);
+      const verifiedItems = normalizarItems(verified.data);
+      if (verifiedItems.length < 2 || hasCameraCountConflict(verifiedItems)) {
+        throw new Error('La lectura produjo combos incompletos o contradictorios. No se guardaron precios; requiere revision manual.');
+      }
+      extracted = verified.data;
+      model = verified.model;
+      items = verifiedItems;
+    }
     if (!items.length) throw new Error('No se encontraron precios válidos en el documento.');
     const saved = await savePrices(admin, document, items);
     const { error: finishError } = await admin.from('documentos')

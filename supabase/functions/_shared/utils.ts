@@ -46,14 +46,65 @@ function validDate(value: unknown): string | null {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : null;
 }
 
-function category(value: unknown): string {
-  const raw = text(value, 80);
-  return CATEGORIES.find((item) => item.toLocaleLowerCase('es-GT') === raw?.toLocaleLowerCase('es-GT')) || 'Otros';
+/** Acepta tanto el nombre exacto de la categoría como sinónimos que devuelve la IA. */
+function normalizarCategoria(value: unknown): string {
+  const raw = text(value, 80)?.toLocaleLowerCase('es-GT') || '';
+  const exact = CATEGORIES.find((item) => item.toLocaleLowerCase('es-GT') === raw);
+  if (exact) return exact;
+  if (/c[aá]mara|seguridad|vigilancia|dvr|cCTV/i.test(raw)) return 'Cámaras de seguridad';
+  if (/aire|acondicionad|minisplit|split/i.test(raw)) return 'Aires acondicionados';
+  if (/accesorio|instalaci[oó]n|cable|balun|conector/i.test(raw)) return 'Accesorios e instalación';
+  return 'Otros';
+}
+
+/** Gemini suele devolver "Q" en vez de "GTQ" o "Kit de videovigilancia" en vez de "promocion". */
+function normalizarMoneda(value: unknown): 'GTQ' | 'USD' | null {
+  const raw = text(value, 20)?.toUpperCase().replace(/\./g, '') || '';
+  if (raw === 'GTQ' || raw === 'Q' || raw === 'QUETZAL') return 'GTQ';
+  if (raw === 'USD' || raw === 'US' || raw === 'DOLAR' || raw === 'DÓLAR' || raw === '$') return 'USD';
+  return null;
+}
+
+function normalizarTipo(value: unknown): 'lista' | 'promocion' | null {
+  const raw = text(value, 60)?.toLocaleLowerCase('es-GT') || '';
+  if (raw === 'lista' || raw === 'list') return 'lista';
+  if (/promoci[oó]n|promo|combo|paquete|kit/.test(raw)) return 'promocion';
+  return null;
+}
+
+function normalizarConfianza(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.min(1, Math.max(0, value));
+  const raw = text(value, 20)?.toLocaleLowerCase('es-GT');
+  if (raw === 'alta' || raw === 'high') return 0.9;
+  if (raw === 'media' || raw === 'medium') return 0.7;
+  if (raw === 'baja' || raw === 'low') return 0.5;
+  return null;
 }
 
 function cleanSpecifications(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   return Object.fromEntries(Object.entries(value as Record<string, unknown>).slice(0, 40));
+}
+
+/** Si la IA devuelve las especificaciones como texto, extrae los datos clave. */
+function normalizarEspecificaciones(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return cleanSpecifications(value);
+  if (typeof value !== 'string') return {};
+
+  const raw = value.slice(0, 2000);
+  const lower = raw.toLocaleLowerCase('es-GT');
+  const specs: Record<string, unknown> = { texto: raw };
+
+  const camaras = lower.match(/\b(\d+)\s*c[aá]maras?\b/);
+  if (camaras) specs.camaras = Number(camaras[1]);
+
+  const canales = lower.match(/dvr\s*(?:de\s*)?(\d+)\s*canales?\b/);
+  if (canales) specs.dvr_canales = Number(canales[1]);
+
+  const disco = lower.match(/\b(\d+(?:[.,]\d+)?)\s*(gb|tb)\b/i);
+  if (disco) specs.almacenamiento = `${disco[1]}${disco[2].toUpperCase()}`;
+
+  return specs;
 }
 
 export function normalizarItems(input: unknown): NormalizedPrice[] {
@@ -65,28 +116,35 @@ export function normalizarItems(input: unknown): NormalizedPrice[] {
     const item = raw as Record<string, unknown>;
     if (typeof item.precio !== 'number' || !Number.isFinite(item.precio) || item.precio < 0 || item.precio > MAX_PRICE) continue;
 
-    const currency = typeof item.moneda === 'string' ? item.moneda.toUpperCase() : '';
-    if (currency !== 'GTQ' && currency !== 'USD') continue;
-    const type = typeof item.tipo === 'string' ? item.tipo.toLowerCase() : '';
-    if (type !== 'lista' && type !== 'promocion') continue;
+    const moneda = normalizarMoneda(item.moneda);
+    if (!moneda) continue;
+    const tipo = normalizarTipo(item.tipo);
+    if (!tipo) continue;
 
     const marca = text(item.marca, 100);
     const modelo = text(item.modelo, 150);
     const nombre = text(item.nombre, 180) || [marca, modelo].filter(Boolean).join(' ');
     if (!nombre) continue;
 
+    const especificaciones = normalizarEspecificaciones(item.especificaciones);
+    // En un combo, el modelo de la cámara no identifica al paquete: todos los
+    // combos compartirían la misma clave. La identidad debe usar el nombre.
+    const esCombo = /\b(combo|paquete|kit)\b/i.test(nombre)
+      || Object.prototype.hasOwnProperty.call(especificaciones, 'camaras')
+      || Object.prototype.hasOwnProperty.call(especificaciones, 'dvr_canales');
+    const modeloFinal = esCombo ? null : modelo;
+
     const vigenteDesde = validDate(item.vigente_desde);
     let vigenteHasta = validDate(item.vigente_hasta);
     if (vigenteDesde && vigenteHasta && vigenteHasta < vigenteDesde) vigenteHasta = null;
-    const confidence = typeof item.confianza === 'number' && Number.isFinite(item.confianza)
-      ? Math.min(1, Math.max(0, item.confianza))
-      : null;
 
     normalized.push({
-      categoria: category(item.categoria), marca, modelo, nombre,
-      descripcion: text(item.descripcion, 2000), especificaciones: cleanSpecifications(item.especificaciones),
-      tipo: type, precio: item.precio, moneda: currency, incluye_iva: typeof item.incluye_iva === 'boolean' ? item.incluye_iva : null,
-      vigente_desde: vigenteDesde, vigente_hasta: vigenteHasta, condiciones: text(item.condiciones, 2000), confianza: confidence,
+      categoria: normalizarCategoria(item.categoria), marca, modelo: modeloFinal, nombre,
+      descripcion: text(item.descripcion, 2000), especificaciones,
+      tipo, precio: item.precio, moneda,
+      incluye_iva: typeof item.incluye_iva === 'boolean' ? item.incluye_iva : null,
+      vigente_desde: vigenteDesde, vigente_hasta: vigenteHasta,
+      condiciones: text(item.condiciones, 2000), confianza: normalizarConfianza(item.confianza),
     });
   }
   return normalized;

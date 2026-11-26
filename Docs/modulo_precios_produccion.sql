@@ -129,8 +129,8 @@ create table public.productos (
   creado_en       timestamptz not null default now(),
   -- identifica "el mismo producto" aunque llegue en distintos documentos
   clave           text generated always as (
-                    lower(regexp_replace(btrim(coalesce(marca, '')), '[[:space:]]+', '', 'g')) || '|' ||
-                    lower(regexp_replace(btrim(coalesce(modelo, nombre)), '[[:space:]]+', '', 'g'))
+                    translate(lower(regexp_replace(btrim(coalesce(marca, '')), '[[:space:]]+', '', 'g')), 'áéíóúüñ', 'aeiouun') || '|' ||
+                    translate(lower(regexp_replace(btrim(coalesce(modelo, nombre)), '[[:space:]]+', '', 'g')), 'áéíóúüñ', 'aeiouun')
                   ) stored,
   unique (clave)
 );

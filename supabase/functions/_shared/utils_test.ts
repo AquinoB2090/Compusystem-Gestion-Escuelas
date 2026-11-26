@@ -52,3 +52,28 @@ Deno.test('normalizarItems devuelve lista vacía si la entrada no contiene items
   assert(normalizarItems({}).length === 0, 'Se aceptó un objeto sin items');
   assert(normalizarItems({ items: 'no es una lista' }).length === 0, 'Se aceptó items no-array');
 });
+
+Deno.test('normalizarItems admite Q, Kit y especificaciones en texto sin perder el combo', () => {
+  const [item] = normalizarItems({ items: [{
+    categoria: 'Sistemas de Seguridad', marca: 'Dahua', modelo: 'DH-HAC-HFW1500RLN-IL-T',
+    nombre: 'Combo 2 Cámaras', especificaciones: '2 cámaras, DVR 4 canales, disco duro 500GB',
+    tipo: 'Kit de videovigilancia', precio: 1150, moneda: 'Q', confianza: 'Alta',
+  }] });
+  assert(Boolean(item), 'Se descartó el combo por el formato de la IA');
+  assert(item?.moneda === 'GTQ', 'La moneda Q no pasó a GTQ');
+  assert(item?.tipo === 'promocion', 'El tipo Kit no pasó a promocion');
+  assert(item?.categoria === 'Cámaras de seguridad', 'La categoría no se normalizó');
+  assert(item?.modelo === null, 'El combo conservó el modelo de la cámara');
+  assert(item?.especificaciones.camaras === 2, 'No se extrajo la cantidad de cámaras del texto');
+  assert(item?.especificaciones.dvr_canales === 4, 'No se extrajeron los canales del DVR');
+  assert(item?.especificaciones.almacenamiento === '500GB', 'No se extrajo el disco');
+  assert(item?.confianza === 0.9, 'No se normalizó la confianza textual');
+});
+
+Deno.test('normalizarItems mantiene el modelo en productos que no son combos', () => {
+  const [item] = normalizarItems({ items: [{
+    nombre: 'Cámara Dahua 5MP', modelo: 'DH-HAC-HFW1500RLN-IL-T', precio: 350,
+    moneda: 'GTQ', tipo: 'lista', especificaciones: {},
+  }] });
+  assert(item?.modelo === 'DH-HAC-HFW1500RLN-IL-T', 'Se borró el modelo de un producto individual');
+});
