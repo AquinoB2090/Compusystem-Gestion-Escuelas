@@ -1,8 +1,9 @@
-export type ModuleKey = 'escuela' | 'instalaciones';
+export type ModuleKey = 'escuela' | 'instalaciones' | 'taller';
 
 const MODULES: Record<ModuleKey, { label: string; href: string; icon: string }> = {
   escuela: { label: 'Escuela', href: '/', icon: '▦' },
   instalaciones: { label: 'Instalaciones', href: '/instalaciones', icon: '◈' },
+  taller: { label: 'Taller', href: '/taller', icon: '⚒' },
 };
 
 export default function ModuleNavbar({ active, available = [active] }: { active: ModuleKey; available?: ModuleKey[] }) {
