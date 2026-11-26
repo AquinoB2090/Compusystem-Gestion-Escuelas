@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { mergeQuoteItem, readQuoteDraft, saveQuoteDraft, subscribeQuoteDraft, type QuoteItem } from '@/lib/quoteDraft';
 
 type PriceRow = {
   precio_id: number; categoria: string; producto_id: number; marca: string | null; modelo: string | null; nombre: string;
@@ -31,6 +32,8 @@ export default function PricesCatalog({ role }: { role: 'admin' | 'ventas' }) {
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState('');
+  const [quoteItems, setQuoteItems] = useState<QuoteItem[]>([]);
+  const [quoteNotice, setQuoteNotice] = useState('');
 
   async function load() {
     setLoading(true); setError('');
@@ -45,13 +48,45 @@ export default function PricesCatalog({ role }: { role: 'admin' | 'ventas' }) {
     if (!providerResult.error) setProviders(providerResult.data || []);
     setLoading(false);
   }
-  useEffect(() => { setPromotionsOnly(new URLSearchParams(window.location.search).get('promociones') === '1'); void load(); }, []);
+  useEffect(() => {
+    setPromotionsOnly(new URLSearchParams(window.location.search).get('promociones') === '1');
+    setQuoteItems(readQuoteDraft());
+    void load();
+    return subscribeQuoteDraft((items) => setQuoteItems((current) => JSON.stringify(current) === JSON.stringify(items) ? current : items));
+  }, []);
 
   const visibleRows = rows.filter((row) => {
     const term = search.trim().toLocaleLowerCase('es-GT');
     const text = [row.marca, row.modelo, row.nombre].filter(Boolean).join(' ').toLocaleLowerCase('es-GT');
     return (!term || text.includes(term)) && (!category || row.categoria === category) && (!provider || row.proveedor === provider) && (!promotionsOnly || row.tipo === 'promocion');
   });
+
+  function addToQuote(row: PriceRow) {
+    if (!row.precio_configurado) {
+      setQuoteNotice('Configura el margen global antes de agregar productos a una cotización.');
+      return;
+    }
+    const { items, error: mergeError } = mergeQuoteItem(quoteItems, {
+      precio_id: row.precio_id,
+      producto_id: row.producto_id,
+      categoria: row.categoria,
+      descripcion: [row.marca, row.modelo, row.nombre].filter((value, index, values) => value && values.indexOf(value) === index).join(' · '),
+      proveedor: row.proveedor,
+      quantity: 1,
+      unit_price: Number(row.precio),
+      moneda: row.moneda,
+      condiciones: row.condiciones,
+      option_group: null,
+      addedManually: true,
+    });
+    if (mergeError) {
+      setQuoteNotice(mergeError);
+      return;
+    }
+    setQuoteItems(items);
+    saveQuoteDraft(items);
+    setQuoteNotice('Producto agregado al borrador de cotización.');
+  }
 
   async function openProduct(row: PriceRow) {
     setSelected(row); setHistory([]); setHistoryLoading(true); setError('');
@@ -79,7 +114,8 @@ export default function PricesCatalog({ role }: { role: 'admin' | 'ventas' }) {
   }
 
   return <div className="installation-page">
-    <div className="installation-page-heading"><div><span className="installation-eyebrow">CATÁLOGO</span><h1>Precios</h1><p>Consulta precios vigentes y compara opciones por proveedor.</p></div></div>
+    <div className="installation-page-heading"><div><span className="installation-eyebrow">CATÁLOGO</span><h1>Precios</h1><p>Consulta precios vigentes, compara opciones y arma tu cotización sin necesidad del bot.</p></div><a className="installation-primary-link price-draft-link" href="/instalaciones/cotizaciones">Ver borrador{quoteItems.length ? ` (${quoteItems.length})` : ''} <span>→</span></a></div>
+    {quoteNotice && <p className="price-draft-notice" role="status">{quoteNotice}</p>}
     <section className="price-toolbar" aria-label="Filtros de precios">
       <label className="price-search">Buscar producto<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Marca, modelo o nombre" /></label>
       <label>Categoría<select value={category} onChange={(event) => setCategory(event.target.value)}><option value="">Todas</option>{categories.map((item) => <option value={item.nombre} key={item.id}>{item.nombre}</option>)}</select></label>
@@ -90,17 +126,23 @@ export default function PricesCatalog({ role }: { role: 'admin' | 'ventas' }) {
     {loading ? <div className="price-empty">Cargando precios…</div> : !visibleRows.length ? <div className="price-empty"><b>{rows.length ? 'No encontramos resultados' : 'Aún no hay precios publicados'}</b><span>{rows.length ? 'Prueba con otros filtros.' : 'Los precios aprobados aparecerán aquí.'}</span></div> : <div className="price-grid">
       {visibleRows.map((row) => {
         const stale = !row.vigente_hasta && ageInDays(row.vigente_desde) > 60;
-        return <button className={`price-card ${stale ? 'price-card-stale' : ''}`} key={row.precio_id} onClick={() => void openProduct(row)}>
-          <span className="price-card-top"><span>{row.categoria}</span>{row.tipo === 'promocion' && <span className="price-promo-badge">Promoción</span>}</span>
-          <b className="price-product-name">{[row.marca, row.modelo].filter(Boolean).join(' ') || row.nombre}</b>
-          {row.nombre !== [row.marca, row.modelo].filter(Boolean).join(' ') && <span className="price-product-description">{row.nombre}</span>}
-          <span className="price-amount">{row.precio_configurado ? currency(row.precio, row.moneda) : 'Margen pendiente'}</span>
-          {row.costo_compra !== null && <span className="price-cost">Costo de compra: {currency(row.costo_compra, row.moneda)}</span>}
-          <span className="price-provider">{row.proveedor || 'Proveedor sin especificar'}</span>
-          <span className="price-badges">{row.es_mejor_precio && <span className="price-best">Mejor precio</span>}{row.dias_restantes !== null && row.dias_restantes >= 0 && <span className={`price-expiry ${row.dias_restantes <= 3 ? 'urgent' : ''}`}>Vence en {row.dias_restantes} {row.dias_restantes === 1 ? 'día' : 'días'}</span>}{row.incluye_iva !== null && <span className="price-tax">{row.incluye_iva ? 'Incluye IVA' : 'Más IVA'}</span>}</span>
-          {stale && <small className="price-stale-note">Actualizado hace {ageInDays(row.vigente_desde)} días</small>}
-          <span className="price-card-link">Ver historial <span>→</span></span>
-        </button>;
+        const inDraft = quoteItems.some((item) => item.precio_id === row.precio_id && item.option_group === null);
+        return <div className="price-card-shell" key={row.precio_id}>
+          <button className={`price-card ${stale ? 'price-card-stale' : ''}`} onClick={() => void openProduct(row)}>
+            <span className="price-card-top"><span>{row.categoria}</span>{row.tipo === 'promocion' && <span className="price-promo-badge">Promoción</span>}</span>
+            <b className="price-product-name">{[row.marca, row.modelo].filter(Boolean).join(' ') || row.nombre}</b>
+            {row.nombre !== [row.marca, row.modelo].filter(Boolean).join(' ') && <span className="price-product-description">{row.nombre}</span>}
+            <span className="price-amount">{row.precio_configurado ? currency(row.precio, row.moneda) : 'Margen pendiente'}</span>
+            {row.costo_compra !== null && <span className="price-cost">Costo de compra: {currency(row.costo_compra, row.moneda)}</span>}
+            <span className="price-provider">{row.proveedor || 'Proveedor sin especificar'}</span>
+            <span className="price-badges">{row.es_mejor_precio && <span className="price-best">Mejor precio</span>}{row.dias_restantes !== null && row.dias_restantes >= 0 && <span className={`price-expiry ${row.dias_restantes <= 3 ? 'urgent' : ''}`}>Vence en {row.dias_restantes} {row.dias_restantes === 1 ? 'día' : 'días'}</span>}{row.incluye_iva !== null && <span className="price-tax">{row.incluye_iva ? 'Incluye IVA' : 'Más IVA'}</span>}</span>
+            {stale && <small className="price-stale-note">Actualizado hace {ageInDays(row.vigente_desde)} días</small>}
+            <span className="price-card-link">Ver historial <span>→</span></span>
+          </button>
+          <button className={`price-card-quote ${inDraft ? 'price-card-quote-added' : ''}`} type="button" disabled={!row.precio_configurado || inDraft} onClick={() => addToQuote(row)}>
+            {!row.precio_configurado ? 'Margen pendiente' : inDraft ? '✓ En cotización' : '＋ Añadir a cotización'}
+          </button>
+        </div>;
       })}
     </div>}
     {!loading && rows.length > 0 && <p className="price-result-count">{visibleRows.length} {visibleRows.length === 1 ? 'resultado' : 'resultados'}</p>}

@@ -1,25 +1,12 @@
 'use client';
 
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { AlignmentType, BorderStyle, Document, Packer, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType } from 'docx';
 import { FunctionsHttpError } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
+import { clearQuoteDraft, mergeQuoteItem, readQuoteDraft, saveQuoteDraft, subscribeQuoteDraft, type QuoteItem } from '@/lib/quoteDraft';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
-type QuoteItem = {
-  precio_id: number;
-  producto_id: number;
-  categoria: string;
-  descripcion: string;
-  proveedor: string | null;
-  quantity: number;
-  unit_price: number;
-  moneda: 'GTQ' | 'USD';
-  line_total: number;
-  condiciones: string | null;
-  option_group: string | null;
-  addedManually?: boolean;
-};
 type QuoteSuggestion = { precio_id: number; producto_id: number; categoria: string; descripcion: string; proveedor: string | null; precio: number; moneda: 'GTQ' | 'USD'; condiciones: string | null };
 type QuoteResult = { message: string; questions: string[]; ready: boolean; items: QuoteItem[]; suggestions: QuoteSuggestion[] };
 
@@ -30,6 +17,8 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
   const supabase = useMemo(() => createClient(), []);
   const [messages, setMessages] = useState<ChatMessage[]>([{ role: 'assistant', content: 'Cuéntame qué productos necesitas y en qué cantidades. Si faltan detalles para elegirlos del catálogo, te haré preguntas.' }]);
   const [items, setItems] = useState<QuoteItem[]>([]);
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [notice, setNotice] = useState('');
   const [suggestions, setSuggestions] = useState<QuoteSuggestion[]>([]);
   const [questions, setQuestions] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
@@ -41,6 +30,17 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
   const [error, setError] = useState('');
   const [quoteDate] = useState(today);
   const threadRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setItems(readQuoteDraft());
+    setDraftLoaded(true);
+    return subscribeQuoteDraft((next) => {
+      setItems((current) => JSON.stringify(current) === JSON.stringify(next) ? current : next);
+    });
+  }, []);
+  useEffect(() => {
+    if (draftLoaded) saveQuoteDraft(items);
+  }, [items, draftLoaded]);
 
   const groups = [...new Set(items.map((item) => item.option_group || 'Cotización'))].map((label) => ({
     label,
@@ -93,15 +93,37 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
   }
 
   function addSuggestedProduct(product: QuoteSuggestion) {
-    const unitPrice = Number(product.precio);
-    if (!Number.isFinite(unitPrice) || unitPrice < 0) return;
-    const existing = items.find((item) => item.precio_id === product.precio_id && item.option_group === null);
-    const next = existing
-      ? items.map((item) => item === existing ? { ...item, quantity: item.quantity + 1, line_total: (item.quantity + 1) * item.unit_price, addedManually: true } : item)
-      : [...items, { precio_id: product.precio_id, producto_id: product.producto_id, categoria: product.categoria, descripcion: product.descripcion, proveedor: product.proveedor, quantity: 1, unit_price: unitPrice, moneda: product.moneda, line_total: unitPrice, condiciones: product.condiciones, option_group: null, addedManually: true }];
+    const { items: next, error: mergeError } = mergeQuoteItem(items, {
+      precio_id: product.precio_id,
+      producto_id: product.producto_id,
+      categoria: product.categoria,
+      descripcion: product.descripcion,
+      proveedor: product.proveedor,
+      quantity: 1,
+      unit_price: Number(product.precio),
+      moneda: product.moneda,
+      condiciones: product.condiciones,
+      option_group: null,
+      addedManually: true,
+    });
+    if (mergeError) {
+      setError(mergeError);
+      return;
+    }
     setItems(next);
     setReady(!hasMixedCurrency(next));
-    setError(hasMixedCurrency(next) ? 'Una misma cotización no puede mezclar GTQ y USD.' : '');
+    setError('');
+    setNotice('Producto agregado al borrador.');
+  }
+
+  function clearDraft() {
+    clearQuoteDraft();
+    setItems([]);
+    setReady(false);
+    setSuggestions([]);
+    setQuestions([]);
+    setNotice('Borrador vaciado.');
+    setError('');
   }
 
   async function downloadWord() {
@@ -155,13 +177,19 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
       const blob = await Packer.toBlob(document);
       const url = URL.createObjectURL(blob);
       const link = window.document.createElement('a'); link.href = url; link.download = `${quoteNumber}.docx`; link.click(); URL.revokeObjectURL(url);
+      clearQuoteDraft();
+      setItems([]);
+      setReady(false);
+      setSuggestions([]);
+      setQuestions([]);
+      setNotice('Cotización descargada. El borrador se limpió para la próxima.');
     } catch {
       setError('No se pudo crear el archivo Word. Inténtalo de nuevo.');
     } finally { setExporting(false); }
   }
 
   return <div className="installation-page">
-    <div className="installation-page-heading"><div><span className="installation-eyebrow">ASISTENTE DE VENTAS</span><h1>Cotizaciones</h1><p>Describe lo que necesitas y prepara un borrador con precios de venta vigentes.</p></div></div>
+    <div className="installation-page-heading"><div><span className="installation-eyebrow">ASISTENTE DE VENTAS</span><h1>Cotizaciones</h1><p>Arma tu borrador desde el catálogo de Precios o con el asistente, con precios de venta vigentes.</p></div></div>
     <div className="quote-workspace">
       <section className="quote-chat-card" aria-label="Chat para cotizar">
         <div className="quote-card-heading"><span className="quote-assistant-mark">C</span><div><b>Asistente de cotizaciones</b><small>Catálogo de productos con precio aprobado</small></div><span className="quote-online-dot" title="Disponible" /></div>
@@ -175,9 +203,10 @@ export default function QuoteAssistant({ salesperson }: { salesperson: string })
         <small className="quote-chat-note">El bot solo puede usar precios aprobados. Revisa cada borrador antes de descargarlo.</small>
       </section>
       <section className="quote-draft-card" aria-label="Borrador de cotización">
-        <div className="quote-draft-heading"><div><span className="installation-eyebrow">BORRADOR</span><h2>Detalle de cotización</h2></div><span className={`quote-draft-status ${ready ? 'quote-status-ready' : ''}`}>{ready ? 'Listo para revisar' : items.length ? 'Borrador parcial' : 'En preparación'}</span></div>
+        <div className="quote-draft-heading"><div><span className="installation-eyebrow">BORRADOR</span><h2>Detalle de cotización</h2></div><span className={`quote-draft-status ${ready ? 'quote-status-ready' : ''}`}>{ready ? 'Listo para revisar' : items.length ? 'Borrador parcial' : 'En preparación'}</span><button className="quote-clear-button" type="button" onClick={clearDraft} disabled={!items.length}>Vaciar</button></div>
+        {notice && <p className="quote-draft-notice" role="status">{notice}</p>}
         <div className="quote-customer-fields"><label>Cliente<input value={customer} onChange={(event) => setCustomer(event.target.value)} placeholder="Nombre del cliente" maxLength={160} /></label><label>NIT <span>Opcional</span><input value={nit} onChange={(event) => setNit(event.target.value)} placeholder="NIT" maxLength={40} /></label></div>
-        {!items.length ? <div className="quote-empty"><span>＋</span><b>Aún no hay productos</b><small>Describe lo que necesitas en el chat para empezar.</small></div> : <div className="quote-items-list">
+        {!items.length ? <div className="quote-empty"><span>＋</span><b>Aún no hay productos</b><small>Agrega productos desde Precios o describe lo que necesitas en el chat.</small><a className="installation-primary-link" href="/instalaciones/precios">Ir a Precios <span>→</span></a></div> : <div className="quote-items-list">
           {groups.map((group) => <section className="quote-option-group" key={group.label}>
             {hasAlternatives && <h3 className="quote-option-heading">{group.label}</h3>}
             {group.items.map((item) => <article className="quote-item-row" key={`${item.precio_id}-${group.label}`}><div className="quote-item-name"><b>{item.descripcion}</b><small>{item.categoria}{item.proveedor ? ` · ${item.proveedor}` : ''}</small>{item.condiciones && <small>{item.condiciones}</small>}</div><label className="quote-quantity">Cant.<input type="number" min={1} max={10000} step={1} value={item.quantity} onChange={(event) => changeQuantity(item.precio_id, item.option_group, event.target.value)} /></label><div className="quote-item-price"><small>{money(item.unit_price, item.moneda)} c/u</small><b>{money(item.quantity * item.unit_price, item.moneda)}</b></div></article>)}
