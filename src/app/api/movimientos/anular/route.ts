@@ -6,7 +6,7 @@ export async function POST(request: Request) {
   const session = await createClient();
   const { data: { user } } = await session.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Inicia sesión para continuar.' }, { status: 401 });
-  const { data: profile } = await session.from('perfiles').select('rol').eq('id', user.id).single();
+  const { data: profile } = await session.from('perfiles').select('rol').eq('id', user.id).eq('activo', true).single();
   if (profile?.rol !== 'admin') return NextResponse.json({ error: 'Solo administración puede anular movimientos.' }, { status: 403 });
 
   const body = await request.json().catch(() => null);

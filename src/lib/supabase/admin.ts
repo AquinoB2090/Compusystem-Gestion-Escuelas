@@ -11,7 +11,7 @@ export async function requireAdmin(): Promise<AdminResult> {
   const { data: { user } } = await session.auth.getUser();
   if (!user) return { error: NextResponse.json({ error: 'Inicia sesión para continuar.' }, { status: 401 }) };
 
-  const { data: profile } = await session.from('perfiles').select('rol').eq('id', user.id).single();
+  const { data: profile } = await session.from('perfiles').select('rol').eq('id', user.id).eq('activo', true).single();
   if (profile?.rol !== 'admin') {
     return { error: NextResponse.json({ error: 'Solo administración puede gestionar los reportes.' }, { status: 403 }) };
   }

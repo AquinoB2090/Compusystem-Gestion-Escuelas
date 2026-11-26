@@ -1,0 +1,572 @@
+Inspección de producción (solo lectura)
+Fecha de resultados compartidos: 2026-11-16
+Fuente: consultas 1–8 de la sección 5.2 de GUIA_CODEX_MODULO_PRECIOS.md. No contiene filas de negocio.
+
+1. Choques de nombres
+Relaciones existentes: categorias, cola_revision, documentos, panel_precios, precios, precios_vigentes, productos, proveedores, remitentes.
+Funciones existentes: marcar_aprobacion, mp_es_admin, mp_es_staff, mp_hoy, upsert_producto.
+Resultado: hay choques; no ejecutar modulo_precios_produccion.sql sobre esta base.
+
+2. CHECK de perfiles
+- director_con_escuela: rol director requiere escuela_id.
+- perfiles_cliente_requiere_cliente: rol cliente requiere cliente_id.
+- perfiles_rol_check: admin, director, cliente y ventas.
+Hay exactamente un CHECK de rol que incluye admin.
+
+3. Funciones public existentes
+- es_admin(): security_definer=true
+- marcar_aprobacion(): security_definer=false
+- mi_escuela(): security_definer=true
+- mp_es_admin(): security_definer=true
+- mp_es_staff(): security_definer=true
+- mp_hoy(): security_definer=false
+- upsert_producto(text,text,text,text,text,jsonb): security_definer=true
+- validar_asignacion(): security_definer=false
+- validar_cheque(): security_definer=false
+- validar_consumo(): security_definer=false
+
+4. Vistas existentes (salida íntegra)[
+  {
+    "viewname": "cheques_resumen",
+    "definition": " SELECT ch.id,\n    ch.escuela_id,\n    e.nombre AS escuela,\n    ch.numero,\n    ch.banco,\n    ch.fecha_recepcion,\n    ch.monto,\n    COALESCE(sum(a.monto) FILTER (WHERE (NOT a.anulada)), (0)::numeric) AS asignado,\n    (ch.monto - COALESCE(sum(a.monto) FILTER (WHERE (NOT a.anulada)), (0)::numeric)) AS por_asignar\n   FROM ((cheques ch\n     JOIN escuelas e ON ((e.id = ch.escuela_id)))\n     LEFT JOIN asignaciones a ON ((a.cheque_id = ch.id)))\n  GROUP BY ch.id, e.nombre;"
+  },
+  {
+    "viewname": "cola_revision",
+    "definition": " SELECT pr.id AS precio_id,\n    pr.documento_id,\n    d.storage_path,\n    d.nombre_archivo,\n    c.nombre AS categoria,\n    p.marca,\n    p.modelo,\n    p.nombre,\n    pv.nombre AS proveedor,\n    pr.tipo,\n    pr.precio,\n    pr.moneda,\n    pr.incluye_iva,\n    pr.vigente_desde,\n    pr.vigente_hasta,\n    pr.condiciones,\n    pr.confianza,\n    pr.creado_en\n   FROM ((((precios pr\n     JOIN productos p ON ((p.id = pr.producto_id)))\n     JOIN categorias c ON ((c.id = p.categoria_id)))\n     LEFT JOIN proveedores pv ON ((pv.id = pr.proveedor_id)))\n     LEFT JOIN documentos d ON ((d.id = pr.documento_id)))\n  WHERE (pr.estado = 'por_revisar'::text);"
+  },
+  {
+    "viewname": "hoja_maestro",
+    "definition": " WITH filas AS (\n         SELECT a.maestro_id,\n            a.periodo,\n            a.creado_en AS orden,\n            ch.fecha_recepcion AS fecha,\n            'Asignación'::text AS tipo,\n            NULL::text AS catedratico,\n            (('Asignación del mes (cheque '::text || ch.numero) || ')'::text) AS descripcion,\n            a.monto AS importe,\n            NULL::boolean AS recibido_conforme,\n            a.id AS ref_id\n           FROM (asignaciones a\n             JOIN cheques ch ON ((ch.id = a.cheque_id)))\n          WHERE (NOT a.anulada)\n        UNION ALL\n         SELECT c.maestro_id,\n            c.periodo,\n            c.creado_en,\n            c.fecha,\n            'Consumo'::text,\n            c.catedratico,\n            c.descripcion,\n            (- c.monto),\n            c.recibido_conforme,\n            c.id\n           FROM consumos c\n          WHERE (NOT c.anulado)\n        )\n SELECT m.escuela_id,\n    f.maestro_id,\n    m.nombre AS maestro,\n    f.periodo,\n    f.fecha,\n    f.tipo,\n    f.catedratico,\n    f.descripcion,\n    f.importe,\n    f.recibido_conforme,\n    sum(f.importe) OVER (PARTITION BY f.maestro_id, f.periodo ORDER BY (f.tipo = 'Consumo'::text), f.fecha, f.orden, f.ref_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS saldo\n   FROM (filas f\n     JOIN maestros m ON ((m.id = f.maestro_id)));"
+  },
+  {
+    "viewname": "hoja_maestro_acumulada",
+    "definition": " WITH asignado AS (\n         SELECT asignaciones.maestro_id,\n            sum(asignaciones.monto) AS monto\n           FROM asignaciones\n          WHERE (NOT asignaciones.anulada)\n          GROUP BY asignaciones.maestro_id\n        ), movimientos AS (\n         SELECT c.maestro_id,\n            c.fecha,\n            c.periodo,\n            c.id,\n            1 AS orden,\n            'consumo'::text AS tipo,\n            c.catedratico,\n            c.descripcion,\n            c.monto AS importe,\n            c.recibido_conforme,\n            c.recibido_por,\n            (- c.monto) AS cambio,\n            c.unidad\n           FROM consumos c\n          WHERE (NOT c.anulado)\n        UNION ALL\n         SELECT j.maestro_id,\n            (j.creado_en)::date AS creado_en,\n            (date_trunc('month'::text, j.creado_en))::date AS date_trunc,\n            j.id,\n            0,\n            'ajuste'::text AS text,\n            'Administración'::text AS text,\n            ('Ajuste de saldo: '::text || j.motivo) AS text,\n            j.saldo_delta,\n            false,\n            NULL::text AS text,\n            j.saldo_delta,\n            'fotocopias'::text AS text\n           FROM ajustes_saldo j\n        )\n SELECT x.maestro_id,\n    x.fecha,\n    x.periodo,\n    x.tipo,\n    x.catedratico,\n    x.descripcion,\n    x.importe,\n    x.recibido_conforme,\n    x.recibido_por,\n    ((COALESCE(a.monto, (0)::numeric) + sum(x.cambio) OVER (PARTITION BY x.maestro_id ORDER BY x.fecha, x.orden, x.id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)))::numeric(12,2) AS saldo,\n    x.unidad\n   FROM (movimientos x\n     LEFT JOIN asignado a ON ((a.maestro_id = x.maestro_id)));"
+  },
+  {
+    "viewname": "panel_precios",
+    "definition": " SELECT v.id AS precio_id,\n    c.nombre AS categoria,\n    p.id AS producto_id,\n    p.marca,\n    p.modelo,\n    p.nombre,\n    p.especificaciones,\n    pv.nombre AS proveedor,\n    v.tipo,\n    v.precio,\n    v.moneda,\n    v.incluye_iva,\n    v.vigente_desde,\n    v.vigente_hasta,\n    (v.vigente_hasta - mp_hoy()) AS dias_restantes,\n    v.condiciones,\n    v.documento_id,\n    (v.precio = min(v.precio) OVER (PARTITION BY v.producto_id, v.moneda)) AS es_mejor_precio\n   FROM (((precios_vigentes v\n     JOIN productos p ON ((p.id = v.producto_id)))\n     JOIN categorias c ON ((c.id = p.categoria_id)))\n     LEFT JOIN proveedores pv ON ((pv.id = v.proveedor_id)))\n  WHERE p.activo;"
+  },
+  {
+    "viewname": "precios_vigentes",
+    "definition": " SELECT DISTINCT ON (producto_id, proveedor_id, tipo) id,\n    producto_id,\n    proveedor_id,\n    documento_id,\n    tipo,\n    precio,\n    moneda,\n    incluye_iva,\n    vigente_desde,\n    vigente_hasta,\n    condiciones,\n    estado,\n    confianza,\n    creado_en,\n    aprobado_por,\n    aprobado_en\n   FROM precios p\n  WHERE ((estado = 'aprobado'::text) AND (vigente_desde <= mp_hoy()) AND ((vigente_hasta IS NULL) OR (vigente_hasta >= mp_hoy())))\n  ORDER BY producto_id, proveedor_id, tipo, vigente_desde DESC, id DESC;"
+  },
+  {
+    "viewname": "saldo_maestro",
+    "definition": " SELECT m.escuela_id,\n    m.id AS maestro_id,\n    m.nombre AS maestro,\n    COALESCE(a.asignado, (0)::numeric) AS asignado,\n    COALESCE(c.consumido, (0)::numeric) AS consumido,\n    ((COALESCE(a.asignado, (0)::numeric) + COALESCE(j.ajustado, (0)::numeric)) - COALESCE(c.consumido, (0)::numeric)) AS saldo\n   FROM (((maestros m\n     LEFT JOIN ( SELECT asignaciones.maestro_id,\n            sum(asignaciones.monto) AS asignado\n           FROM asignaciones\n          WHERE (NOT asignaciones.anulada)\n          GROUP BY asignaciones.maestro_id) a ON ((a.maestro_id = m.id)))\n     LEFT JOIN ( SELECT consumos.maestro_id,\n            sum(consumos.monto) AS consumido\n           FROM consumos\n          WHERE (NOT consumos.anulado)\n          GROUP BY consumos.maestro_id) c ON ((c.maestro_id = m.id)))\n     LEFT JOIN ( SELECT ajustes_saldo.maestro_id,\n            sum(ajustes_saldo.saldo_delta) AS ajustado\n           FROM ajustes_saldo\n          GROUP BY ajustes_saldo.maestro_id) j ON ((j.maestro_id = m.id)))\n  WHERE m.activo;"
+  },
+  {
+    "viewname": "saldo_mensual",
+    "definition": " WITH a AS (\n         SELECT asignaciones.maestro_id,\n            asignaciones.periodo,\n            sum(asignaciones.monto) AS asignado\n           FROM asignaciones\n          WHERE (NOT asignaciones.anulada)\n          GROUP BY asignaciones.maestro_id, asignaciones.periodo\n        ), c AS (\n         SELECT consumos.maestro_id,\n            consumos.periodo,\n            sum(consumos.monto) AS consumido\n           FROM consumos\n          WHERE (NOT consumos.anulado)\n          GROUP BY consumos.maestro_id, consumos.periodo\n        )\n SELECT m.escuela_id,\n    m.id AS maestro_id,\n    m.nombre AS maestro,\n    p.periodo,\n    COALESCE(a.asignado, (0)::numeric) AS asignado,\n    COALESCE(c.consumido, (0)::numeric) AS consumido,\n    (COALESCE(a.asignado, (0)::numeric) - COALESCE(c.consumido, (0)::numeric)) AS saldo\n   FROM (((maestros m\n     JOIN ( SELECT a_1.maestro_id,\n            a_1.periodo\n           FROM a a_1\n        UNION\n         SELECT c_1.maestro_id,\n            c_1.periodo\n           FROM c c_1) p ON ((p.maestro_id = m.id)))\n     LEFT JOIN a ON (((a.maestro_id = p.maestro_id) AND (a.periodo = p.periodo))))\n     LEFT JOIN c ON (((c.maestro_id = p.maestro_id) AND (c.periodo = p.periodo))));"
+  }
+]
+5. Políticas RLS public/storage (salida íntegra)[
+  {
+    "schemaname": "public",
+    "tablename": "ajustes_saldo",
+    "policyname": "ajustes_saldo_select",
+    "cmd": "SELECT",
+    "roles": "{authenticated}",
+    "qual": "(es_admin() OR (escuela_id = mi_escuela()))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "asignaciones",
+    "policyname": "admin_insert",
+    "cmd": "INSERT",
+    "roles": "{public}",
+    "qual": null,
+    "with_check": "es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "asignaciones",
+    "policyname": "admin_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "es_admin()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "asignaciones",
+    "policyname": "admin_update",
+    "cmd": "UPDATE",
+    "roles": "{public}",
+    "qual": "es_admin()",
+    "with_check": "es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "asignaciones",
+    "policyname": "director_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "(EXISTS ( SELECT 1\n   FROM maestros m\n  WHERE ((m.id = asignaciones.maestro_id) AND (m.escuela_id = mi_escuela()))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "categorias",
+    "policyname": "admin_insert",
+    "cmd": "INSERT",
+    "roles": "{public}",
+    "qual": null,
+    "with_check": "mp_es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "categorias",
+    "policyname": "admin_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "mp_es_admin()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "categorias",
+    "policyname": "admin_update",
+    "cmd": "UPDATE",
+    "roles": "{public}",
+    "qual": "mp_es_admin()",
+    "with_check": "mp_es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "categorias",
+    "policyname": "staff_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "mp_es_staff()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cheques",
+    "policyname": "admin_insert",
+    "cmd": "INSERT",
+    "roles": "{public}",
+    "qual": null,
+    "with_check": "es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cheques",
+    "policyname": "admin_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "es_admin()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cheques",
+    "policyname": "admin_update",
+    "cmd": "UPDATE",
+    "roles": "{public}",
+    "qual": "es_admin()",
+    "with_check": "es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "clientes_individuales",
+    "policyname": "clientes_individuales_admin",
+    "cmd": "ALL",
+    "roles": "{authenticated}",
+    "qual": "es_admin()",
+    "with_check": "es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "clientes_individuales",
+    "policyname": "clientes_individuales_own",
+    "cmd": "SELECT",
+    "roles": "{authenticated}",
+    "qual": "(id = ( SELECT p.cliente_id\n   FROM perfiles p\n  WHERE (p.id = auth.uid())))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "consumos",
+    "policyname": "admin_insert",
+    "cmd": "INSERT",
+    "roles": "{public}",
+    "qual": null,
+    "with_check": "es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "consumos",
+    "policyname": "admin_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "es_admin()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "consumos",
+    "policyname": "admin_update",
+    "cmd": "UPDATE",
+    "roles": "{public}",
+    "qual": "es_admin()",
+    "with_check": "es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "consumos",
+    "policyname": "director_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "(EXISTS ( SELECT 1\n   FROM maestros m\n  WHERE ((m.id = consumos.maestro_id) AND (m.escuela_id = mi_escuela()))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "consumos_clientes",
+    "policyname": "consumos_clientes_admin",
+    "cmd": "ALL",
+    "roles": "{authenticated}",
+    "qual": "es_admin()",
+    "with_check": "es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "consumos_clientes",
+    "policyname": "consumos_clientes_own",
+    "cmd": "SELECT",
+    "roles": "{authenticated}",
+    "qual": "(cliente_id = ( SELECT p.cliente_id\n   FROM perfiles p\n  WHERE (p.id = auth.uid())))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "documentos",
+    "policyname": "admin_insert",
+    "cmd": "INSERT",
+    "roles": "{public}",
+    "qual": null,
+    "with_check": "mp_es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "documentos",
+    "policyname": "admin_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "mp_es_admin()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "documentos",
+    "policyname": "admin_update",
+    "cmd": "UPDATE",
+    "roles": "{public}",
+    "qual": "mp_es_admin()",
+    "with_check": "mp_es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "documentos",
+    "policyname": "staff_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "mp_es_staff()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "escuelas",
+    "policyname": "admin_insert",
+    "cmd": "INSERT",
+    "roles": "{public}",
+    "qual": null,
+    "with_check": "es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "escuelas",
+    "policyname": "admin_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "es_admin()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "escuelas",
+    "policyname": "admin_update",
+    "cmd": "UPDATE",
+    "roles": "{public}",
+    "qual": "es_admin()",
+    "with_check": "es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "escuelas",
+    "policyname": "director_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "(id = mi_escuela())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "liquidaciones_clientes",
+    "policyname": "liquidaciones_clientes_admin",
+    "cmd": "ALL",
+    "roles": "{authenticated}",
+    "qual": "es_admin()",
+    "with_check": "es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "liquidaciones_clientes",
+    "policyname": "liquidaciones_clientes_own",
+    "cmd": "SELECT",
+    "roles": "{authenticated}",
+    "qual": "(cliente_id = ( SELECT p.cliente_id\n   FROM perfiles p\n  WHERE (p.id = auth.uid())))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "maestros",
+    "policyname": "admin_insert",
+    "cmd": "INSERT",
+    "roles": "{public}",
+    "qual": null,
+    "with_check": "es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "maestros",
+    "policyname": "admin_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "es_admin()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "maestros",
+    "policyname": "admin_update",
+    "cmd": "UPDATE",
+    "roles": "{public}",
+    "qual": "es_admin()",
+    "with_check": "es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "maestros",
+    "policyname": "director_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "(escuela_id = mi_escuela())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "perfiles",
+    "policyname": "admin_insert",
+    "cmd": "INSERT",
+    "roles": "{public}",
+    "qual": null,
+    "with_check": "es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "perfiles",
+    "policyname": "admin_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "es_admin()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "perfiles",
+    "policyname": "admin_update",
+    "cmd": "UPDATE",
+    "roles": "{public}",
+    "qual": "es_admin()",
+    "with_check": "es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "perfiles",
+    "policyname": "propio_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "(id = auth.uid())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "precios",
+    "policyname": "admin_insert",
+    "cmd": "INSERT",
+    "roles": "{public}",
+    "qual": null,
+    "with_check": "mp_es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "precios",
+    "policyname": "admin_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "mp_es_admin()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "precios",
+    "policyname": "admin_update",
+    "cmd": "UPDATE",
+    "roles": "{public}",
+    "qual": "mp_es_admin()",
+    "with_check": "mp_es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "precios",
+    "policyname": "staff_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "(mp_es_staff() AND (estado = 'aprobado'::text))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "productos",
+    "policyname": "admin_insert",
+    "cmd": "INSERT",
+    "roles": "{public}",
+    "qual": null,
+    "with_check": "mp_es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "productos",
+    "policyname": "admin_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "mp_es_admin()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "productos",
+    "policyname": "admin_update",
+    "cmd": "UPDATE",
+    "roles": "{public}",
+    "qual": "mp_es_admin()",
+    "with_check": "mp_es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "productos",
+    "policyname": "staff_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "mp_es_staff()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "proveedores",
+    "policyname": "admin_insert",
+    "cmd": "INSERT",
+    "roles": "{public}",
+    "qual": null,
+    "with_check": "mp_es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "proveedores",
+    "policyname": "admin_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "mp_es_admin()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "proveedores",
+    "policyname": "admin_update",
+    "cmd": "UPDATE",
+    "roles": "{public}",
+    "qual": "mp_es_admin()",
+    "with_check": "mp_es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "proveedores",
+    "policyname": "staff_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "mp_es_staff()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "remitentes",
+    "policyname": "admin_insert",
+    "cmd": "INSERT",
+    "roles": "{public}",
+    "qual": null,
+    "with_check": "mp_es_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "remitentes",
+    "policyname": "admin_select",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "mp_es_admin()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "remitentes",
+    "policyname": "admin_update",
+    "cmd": "UPDATE",
+    "roles": "{public}",
+    "qual": "mp_es_admin()",
+    "with_check": "mp_es_admin()"
+  },
+  {
+    "schemaname": "storage",
+    "tablename": "objects",
+    "policyname": "admin sube documentos de precios",
+    "cmd": "INSERT",
+    "roles": "{public}",
+    "qual": null,
+    "with_check": "((bucket_id = 'documentos-precios'::text) AND mp_es_admin())"
+  },
+  {
+    "schemaname": "storage",
+    "tablename": "objects",
+    "policyname": "staff lee documentos de precios",
+    "cmd": "SELECT",
+    "roles": "{public}",
+    "qual": "((bucket_id = 'documentos-precios'::text) AND mp_es_staff())",
+    "with_check": null
+  }
+]
+6. Tablas public con RLS activo
+Compusystem, ajustes_saldo, asignaciones, categorias, cheques, clientes_individuales, consumos, consumos_clientes, documentos, escuelas, liquidaciones_clientes, maestros, perfiles, precios, productos, proveedores, remitentes.
+
+7. Triggers existentes
+- asignaciones: trg_validar_asignacion BEFORE INSERT y BEFORE UPDATE.
+- cheques: trg_validar_cheque BEFORE UPDATE.
+- consumos: trg_validar_consumo BEFORE INSERT.
+- precios: trg_marcar_aprobacion BEFORE UPDATE.
+
+8. Buckets de Storage
+- reportes (privado)
+- documentos-precios (privado)
+
+La inspección confirma que los objetos del módulo de precios ya existen en la base. No aplicar la migración entregada sin decidir previamente cómo tratar estos objetos.

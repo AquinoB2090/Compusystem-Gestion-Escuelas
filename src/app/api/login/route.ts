@@ -26,7 +26,8 @@ export async function POST(request: NextRequest) {
   if (matches.length > 1) return NextResponse.json({ error: 'El usuario no es único. Solicita al administrador que revise los perfiles.' }, { status: 409 });
 
   const { data: { user }, error: userError } = await admin.auth.admin.getUserById(matches[0].id);
-  if (userError || !user?.email) return NextResponse.json({ error: 'La cuenta no tiene un correo de acceso válido.' }, { status: 500 });
+  if (userError) return NextResponse.json({ error: 'No se pudo verificar la cuenta. Inténtalo de nuevo.' }, { status: 503 });
+  if (!user?.email) return NextResponse.json({ error: 'La cuenta no tiene un correo de acceso válido.' }, { status: 401 });
 
   const response = NextResponse.json({ ok: true });
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;

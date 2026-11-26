@@ -223,28 +223,33 @@ export default function AdminClients() {
     setBusy(true);
     setError('');
     setNotice('');
-    const response = await fetch('/api/usuarios', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        nombre: String(data.get('nombre')),
-        usuario: String(data.get('usuario')),
-        password: String(data.get('password')),
-        rol: 'cliente',
-        crear_cliente: true,
-        cliente_nombre: String(data.get('nombre')),
-        telefono: String(data.get('telefono') || ''),
-      }),
-    });
-    const result = await response.json();
-    setBusy(false);
-    if (!response.ok) {
-      setError(result.error || 'No se pudo crear el cliente y su acceso.');
-      return;
+    try {
+      const response = await fetch('/api/usuarios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: String(data.get('nombre')),
+          usuario: String(data.get('usuario')),
+          password: String(data.get('password')),
+          rol: 'cliente',
+          crear_cliente: true,
+          cliente_nombre: String(data.get('nombre')),
+          telefono: String(data.get('telefono') || ''),
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(result.error || 'No se pudo crear el cliente y su acceso.');
+        return;
+      }
+      form.reset();
+      setNotice(`Cliente y cuenta creados. Usuario: ${result.usuario}. Anota la contraseña; no se podrá volver a consultar.`);
+      await load();
+    } catch {
+      setError('No se pudo crear el cliente. Revisa tu conexión.');
+    } finally {
+      setBusy(false);
     }
-    form.reset();
-    setNotice(`Cliente y cuenta creados. Usuario: ${result.usuario}. Anota la contraseña; no se podrá volver a consultar.`);
-    await load();
   }
 
   async function saveMovement(event: React.FormEvent<HTMLFormElement>) {
@@ -315,17 +320,21 @@ export default function AdminClients() {
     let values: Record<string, unknown>;
     if (isConsumption) {
       const consumption = item as Movement;
-      const amount = Number(window.prompt(
+      const rawAmount = window.prompt(
         consumption.unidad === 'fotocopias' ? 'Cantidad de fotocopias:' : 'Cantidad en quetzales:',
         String(consumption.cantidad),
-      ));
+      );
+      if (rawAmount === null) return;
+      const amount = Number(rawAmount);
       if (!Number.isFinite(amount) || amount <= 0 || (consumption.unidad === 'fotocopias' && !Number.isInteger(amount))) {
         setError('Ingresa una cantidad válida.');
         return;
       }
       values = { fecha, descripcion: descripcion.trim(), cantidad: amount };
     } else {
-      const amount = Number(window.prompt('Monto pagado en quetzales:', String((item as Payment).monto)));
+      const rawAmount = window.prompt('Monto pagado en quetzales:', String((item as Payment).monto));
+      if (rawAmount === null) return;
+      const amount = Number(rawAmount);
       if (!Number.isFinite(amount) || amount <= 0) {
         setError('Ingresa un monto válido.');
         return;
@@ -444,7 +453,7 @@ export default function AdminClients() {
 
       <div className="section-head">
         <div><h2>Resumen por cliente</h2><p>Pagos de {monthLabel} y deuda pendiente total</p></div>
-        <label className="report-filter">Mes<input type="month" value={summaryMonth} onChange={(event) => setSummaryMonth(event.target.value)} /></label>
+        <label className="report-filter">Mes<input type="month" value={summaryMonth} onChange={(event) => { if (event.target.value) setSummaryMonth(event.target.value); }} /></label>
       </div>
       <div className="table-card">
         <table>
@@ -530,7 +539,7 @@ export default function AdminClients() {
               </div>
 
               <div className="client-counters">
-                <div className="client-metric client-debt"><span>Deuda pendiente</span><strong>{money(used - paid)}</strong></div>
+                <div className="client-metric client-debt"><span>Deuda pendiente</span><strong>{money(Math.max(0, used - paid))}</strong></div>
                 <div className="client-metric"><span>Consumo acumulado</span><strong>{money(used)}</strong></div>
                 <div className="client-metric"><span>Total pagado</span><strong>{money(paid)}</strong></div>
                 <div className="client-copy-count">{copies.toLocaleString('es-GT')} fotocopias</div>

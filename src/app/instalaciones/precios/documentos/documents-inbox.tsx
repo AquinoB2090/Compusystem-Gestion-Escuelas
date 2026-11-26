@@ -1,0 +1,63 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
+
+type Provider={id:number;nombre:string};
+type DocumentRow={id:number;origen:string;proveedor_id:number|null;storage_path:string;nombre_archivo:string|null;mime:string;estado:'pendiente'|'procesando'|'procesado'|'error';error:string|null;recibido_en:string;procesando_desde:string|null;intentos:number};
+const acceptedTypes=['application/pdf','image/jpeg','image/png','image/webp'];
+const maxBytes=150*1024*1024;
+const staleAfterMs=10*60*1000;
+const documentDate=(value:string)=>new Intl.DateTimeFormat('es-GT',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value));
+const isStuck=(item:DocumentRow)=>item.estado==='procesando'&&Date.now()-new Date(item.procesando_desde||item.recibido_en).getTime()>staleAfterMs;
+
+export default function DocumentsInbox(){
+  const supabase=useMemo(()=>createClient(),[]);
+  const [documents,setDocuments]=useState<DocumentRow[]>([]);const [providers,setProviders]=useState<Provider[]>([]);const [signed,setSigned]=useState<Record<number,string>>({});const [providerId,setProviderId]=useState('');const [loading,setLoading]=useState(true);const [busy,setBusy]=useState(false);const [signing,setSigning]=useState<number|null>(null);const [error,setError]=useState('');const [notice,setNotice]=useState('');
+  async function load(silent=false){if(!silent){setLoading(true);setError('');}const [docsResult,providersResult]=await Promise.all([supabase.from('documentos').select('id,origen,proveedor_id,storage_path,nombre_archivo,mime,estado,error,recibido_en,procesando_desde,intentos').order('recibido_en',{ascending:false}),supabase.from('proveedores').select('id,nombre').eq('activo',true).order('nombre')]);if(docsResult.error){setError('No se pudo cargar la bandeja de documentos.');setDocuments([]);setLoading(false);return;}setDocuments((docsResult.data||[]) as DocumentRow[]);if(!providersResult.error)setProviders(providersResult.data||[]);setLoading(false);}
+  useEffect(()=>{void load();},[]);
+  // El procesador responde de inmediato y trabaja en segundo plano: sondeamos el estado.
+  useEffect(()=>{if(!documents.some((item)=>item.estado==='pendiente'||item.estado==='procesando'))return;const timer=setInterval(()=>{void load(true);},5000);return ()=>clearInterval(timer);},[documents]);
+
+  async function upload(event:React.FormEvent<HTMLFormElement>){event.preventDefault();const form=event.currentTarget;const data=new FormData(form);const file=data.get('archivo');if(!(file instanceof File)||file.size===0){setError('Selecciona un PDF o una imagen.');return;}if(!acceptedTypes.includes(file.type)){setError('El formato permitido es PDF, JPG, PNG o WebP.');return;}if(file.size>maxBytes){setError('El archivo debe pesar 150 MB o menos.');return;}setBusy(true);setError('');setNotice('');
+    const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Guatemala',year:'numeric',month:'2-digit'}).formatToParts(new Date());const year=parts.find((part)=>part.type==='year')?.value||'0000';const month=parts.find((part)=>part.type==='month')?.value||'00';const safeName=file.name.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'').slice(-100)||'documento';const path=`manual/${year}/${month}/${crypto.randomUUID()}-${safeName}`;
+    const {error:uploadError}=await supabase.storage.from('documentos-precios').upload(path,file,{contentType:file.type,cacheControl:'3600',upsert:false});if(uploadError){setBusy(false);setError('No se pudo subir el archivo. Verifica el formato y los permisos.');return;}
+    const parsedProvider=Number(data.get('proveedor_id'))||null;const {data:document,error:insertError}=await supabase.from('documentos').insert({origen:'manual',storage_path:path,nombre_archivo:file.name,mime:file.type,proveedor_id:parsedProvider,estado:'pendiente'}).select('id').single();if(insertError||!document){setBusy(false);setError('El archivo se subió, pero no se pudo registrar en la bandeja. Contacta a administración antes de subirlo otra vez.');return;}
+    const {error:processingError}=await supabase.functions.invoke('procesar-documento',{body:{documento_id:document.id}});setBusy(false);form.reset();setProviderId('');setNotice(processingError?'Documento subido, pero no se pudo iniciar el procesamiento. Usa «Reintentar» en la bandeja.':'Documento subido. El procesamiento continúa en segundo plano; la bandeja se actualizará sola.');await load(true);
+  }
+
+  async function retry(item:DocumentRow){setBusy(true);setError('');setNotice('');const values={estado:'pendiente',error:null,procesando_desde:null};const cutoff=new Date(Date.now()-staleAfterMs).toISOString();const {error:retryError}=item.estado==='error'
+    ?await supabase.from('documentos').update(values).eq('id',item.id).eq('estado','error')
+    :item.procesando_desde
+      ?await supabase.from('documentos').update(values).eq('id',item.id).eq('estado','procesando').lt('procesando_desde',cutoff)
+      :await supabase.from('documentos').update(values).eq('id',item.id).eq('estado','procesando').is('procesando_desde',null).lt('recibido_en',cutoff);
+    if(retryError){setBusy(false);setError('No se pudo reintentar este documento.');return;}const {error:processingError}=await supabase.functions.invoke('procesar-documento',{body:{documento_id:item.id}});setBusy(false);setNotice(processingError?'No se pudo iniciar el procesamiento; vuelve a intentarlo.':'Procesamiento reiniciado. La bandeja se actualizará sola.');await load(true);}
+  async function signDocument(item:DocumentRow){setSigning(item.id);setError('');setNotice('');const {data,error:signError}=await supabase.storage.from('documentos-precios').createSignedUrl(item.storage_path,60);setSigning(null);if(signError||!data?.signedUrl){setError('No se pudo abrir el documento original.');return;}setSigned((current)=>({...current,[item.id]:data.signedUrl}));}
+  async function deleteDocument(item:DocumentRow){
+    if(item.estado==='procesando'){setError('Espera a que termine el procesamiento antes de eliminar este documento.');return;}
+    setError('');setNotice('');
+    const {count,error:countError}=await supabase.from('precios').select('id',{count:'exact',head:true}).eq('documento_id',item.id);
+    if(countError){setError('No se pudo verificar si el documento tiene precios vinculados.');return;}
+    const linkedPrices=count||0;
+    const detail=linkedPrices?` Tambien se eliminaran ${linkedPrices} precio${linkedPrices===1?'':'s'} extraido${linkedPrices===1?'':'s'}, incluidos los aprobados.`:'';
+    if(!window.confirm(`Eliminar "${item.nombre_archivo||'Documento sin nombre'}"? Se borraran el archivo original y el registro.${detail} Esta accion no se puede deshacer.`))return;
+    setBusy(true);
+    const {data,error:deleteError}=await supabase.rpc('mp_eliminar_documento',{p_documento_id:item.id});
+    if(deleteError){setBusy(false);setError(deleteError.message.includes('documento_en_proceso')?'El documento empezo a procesarse. Espera a que termine antes de eliminarlo.':'No se pudo eliminar el documento.');return;}
+    const result=Array.isArray(data)?data[0]:data;
+    const deletedPrices=Number(result?.precios_eliminados??linkedPrices);
+    const {error:storageError}=await supabase.storage.from('documentos-precios').remove([result?.storage_path||item.storage_path]);
+    setSigned((current)=>{const next={...current};delete next[item.id];return next;});
+    setDocuments((current)=>current.filter((document)=>document.id!==item.id));
+    setBusy(false);
+    if(storageError){setError(`Se borraron el registro y ${deletedPrices} precio${deletedPrices===1?'':'s'} asociado${deletedPrices===1?'':'s'}, pero no se pudo borrar el archivo del almacenamiento.`);return;}
+    setNotice(`Documento eliminado${deletedPrices?` junto con ${deletedPrices} precio${deletedPrices===1?'':'s'} asociado${deletedPrices===1?'':'s'}`:''}.`);
+  }
+  const statusLabel:Record<DocumentRow['estado'],string>={pendiente:'Pendiente',procesando:'Procesando',procesado:'Procesado',error:'Error'};
+  return <div className="installation-page"><div className="installation-page-heading"><div><span className="installation-eyebrow">ADMINISTRACIÓN</span><h1>Documentos</h1><p>Sube cotizaciones y consulta su estado de procesamiento.</p></div></div>
+    {error&&<div className="installation-alert" role="alert">{error}</div>}{notice&&<div className="review-notice" role="status">{notice}</div>}
+    <section className="document-upload-card"><div><span className="installation-eyebrow">SUBIDA MANUAL</span><h2>Agregar cotización</h2><p>PDF, JPG, PNG o WebP · máximo 150 MB</p></div><form className="document-upload-form" onSubmit={upload}><label>Archivo<input name="archivo" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" required/></label><label>Proveedor<select name="proveedor_id" value={providerId} onChange={(event)=>setProviderId(event.target.value)}><option value="">Sin especificar</option>{providers.map((provider)=> <option key={provider.id} value={provider.id}>{provider.nombre}</option>)}</select></label><button className="installation-primary-link" disabled={busy}>{busy?'Subiendo…':'Subir documento'}</button></form></section>
+    <div className="document-inbox-heading"><div><h2>Bandeja de documentos</h2><p>{documents.length} archivos recibidos</p></div><button className="review-secondary" onClick={()=>void load()} disabled={loading}>Actualizar</button></div>
+    {loading?<div className="price-empty">Cargando documentos…</div>:!documents.length?<div className="price-empty"><b>No hay documentos</b><span>Las cotizaciones que subas aparecerán aquí.</span></div>:<div className="document-list">{documents.map((item)=><article className="document-row" key={item.id}><span className={`document-file-icon ${item.estado==='error'?'has-error':''}`}>{item.mime==='application/pdf'?'PDF':'IMG'}</span><div className="document-file-info"><b>{item.nombre_archivo||'Documento sin nombre'}</b><span>{providers.find((provider)=>provider.id===item.proveedor_id)?.nombre||'Proveedor sin especificar'} · {documentDate(item.recibido_en)}</span>{item.estado==='error'&&item.error&&<small className="document-error-text">{item.error}</small>}{isStuck(item)&&<small className="document-error-text">El procesamiento se interrumpió. Usa «Reintentar».</small>}</div><span className={`document-status status-${item.estado}`}>{statusLabel[item.estado]}</span><div className="document-actions">{signed[item.id]?<a href={signed[item.id]} target="_blank" rel="noreferrer">Ver original</a>:<button className="review-secondary" disabled={signing===item.id} onClick={()=>void signDocument(item)}>{signing===item.id?'Abriendo…':'Ver original'}</button>}{(item.estado==='error'||isStuck(item))&&<button className="review-secondary" disabled={busy} onClick={()=>void retry(item)}>Reintentar</button>}<button className="review-danger" disabled={busy||item.estado==='procesando'} onClick={()=>void deleteDocument(item)}>{item.estado==='procesando'?'Procesando…':'Eliminar'}</button></div></article>)}</div>}
+  </div>;
+}

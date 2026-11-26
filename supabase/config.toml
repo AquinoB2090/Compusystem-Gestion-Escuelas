@@ -1,0 +1,15 @@
+[edge_runtime]
+# Necesario para que EdgeRuntime.waitUntil termine en funciones servidas en local.
+policy = "per_worker"
+
+[functions.procesar-documento]
+# The handler checks either an admin user session or the server-only secret key.
+verify_jwt = false
+
+[functions.whatsapp-webhook]
+# Meta signs the raw body; the function verifies that signature itself.
+verify_jwt = false
+
+[functions.cotizar]
+# The function validates the caller's JWT and role before querying the catalog.
+verify_jwt = false
