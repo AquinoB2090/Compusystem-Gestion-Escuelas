@@ -1,0 +1,28 @@
+.control-app{min-height:100vh;background:#f5f7fa;color:#172333}
+.control-main{width:min(1200px,100%);margin:0 auto;padding:38px 36px 60px}
+.control-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin:0 0 26px}
+.control-eyebrow,.control-module{color:#607187;font-size:10px;font-weight:800;letter-spacing:1.2px}
+.control-heading h1{margin:8px 0 5px;font-size:31px;letter-spacing:-.8px}
+.control-heading p{margin:0;color:#64748b;font-size:13px}
+.control-period{padding:9px 13px;border:1px solid #dfe5ed;border-radius:9px;background:white;color:#3c4b5e;font-size:11px;font-weight:700;text-transform:capitalize}
+.control-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch;gap:16px}
+.control-card{min-height:280px;padding:21px;border:1px solid #e0e6ee;border-radius:15px;background:white;box-shadow:0 5px 18px #1b2c3d08}
+.control-card-top{display:flex;align-items:center;gap:9px}
+.control-icon{display:grid;width:34px;height:34px;place-items:center;border-radius:10px;background:#edf3ff;color:#3459ad;font-size:16px;font-weight:800}
+.control-installations .control-icon{background:#e9f7f3;color:#14836f}
+.control-workshop .control-icon{background:#fff3e7;color:#bd6b1b}
+.control-module{font-size:9px}
+.control-card-top a{margin-left:auto;color:#52657c;font-size:10px;font-weight:700;text-decoration:none}
+.control-card-top a:hover{color:#2454ac}
+.control-card h2{margin:20px 0 18px;font-size:17px;letter-spacing:-.2px}
+.control-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:0 0 19px;border-bottom:1px solid #edf0f4}
+.control-stats div{display:grid;gap:5px}
+.control-stats b{font-size:26px;line-height:1.1;letter-spacing:-.7px}
+.control-stats span,.control-foot{color:#6b7a8d;font-size:10px}
+.control-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;padding-top:15px}
+.control-foot strong{color:#1c2c40;font-size:13px}
+.control-foot-secondary{padding-top:9px}
+.control-error{padding:13px;border-radius:8px;background:#fff2f0;color:#aa3b32;font-size:12px;line-height:1.5}
+.control-note{margin:18px 1px 0;color:#7b8796;font-size:10px;line-height:1.5}
+@media(max-width:900px){.control-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.control-main{padding:30px 24px 50px}}
+@media(max-width:650px){.control-main{padding:24px 15px 40px}.control-heading{align-items:flex-start;flex-direction:column;gap:13px}.control-heading h1{font-size:26px}.control-grid{grid-template-columns:1fr}.control-card{min-height:0;padding:18px}.control-note{margin-top:14px}}
