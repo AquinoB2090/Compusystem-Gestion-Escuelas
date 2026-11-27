@@ -1,8 +1,184 @@
-﻿.workshop-app{--install-ink:#182826;--install-muted:#687b77;--install-line:#dce8e5;--install-accent:#167a78;--install-accent-deep:#105c5a;--install-accent-ink:#fff;--install-accent-soft:#e1f2ef;--install-surface:#fff;--install-bg:#f3f8f7;--install-dark:#1d3533;--install-dark-soft:#294542;--install-danger:#a23d36;--install-danger-soft:#fff0ec;--install-success:#26735d;--install-success-soft:#eaf5ef;--install-gutter:clamp(16px,3.2vw,43px);--install-top:0px;min-height:100vh;background:var(--install-bg);color:var(--install-ink)}
-.workshop-app .installation-sidebar{position:fixed;inset:0 auto 0 0;z-index:20;display:flex;width:250px;flex-direction:column;padding:25px 17px 18px;border-right:1px solid var(--install-line);background:var(--install-surface)}.workshop-app .installation-brand-lockup{display:flex;align-items:center;gap:11px;padding:0 8px;color:var(--install-ink);text-decoration:none}.workshop-app .installation-logo{display:grid;width:42px;height:42px;place-items:center;border-radius:12px;background:var(--install-accent);color:white;font-size:22px;font-weight:800}.workshop-app .installation-brand-lockup>span:last-child{display:grid;gap:2px}.workshop-app .installation-brand-lockup b{font-size:14px}.workshop-app .installation-brand-lockup small{color:var(--install-muted);font-size:9px;font-weight:800;letter-spacing:1.3px}.workshop-app .installation-nav-label{margin:31px 9px 10px;color:var(--install-muted);font-size:9px;font-weight:800;letter-spacing:1.2px}.workshop-app .installation-nav{display:grid;gap:5px}.workshop-app .installation-nav a{display:flex;min-height:42px;align-items:center;gap:11px;padding:0 11px;border-radius:8px;color:var(--install-ink);font-size:12px;font-weight:650;text-decoration:none}.workshop-app .installation-nav a:hover,.workshop-app .installation-nav a[aria-current=page]{background:var(--install-accent-soft);color:var(--install-accent-deep)}.workshop-app .installation-nav a span{display:grid;width:22px;height:22px;place-items:center;border-radius:7px;background:var(--install-accent-soft);color:var(--install-accent-deep)}.workshop-app .installation-sidebar-bottom{display:grid;gap:13px;margin-top:auto}.workshop-app .installation-user{display:flex;align-items:center;gap:10px;padding:10px 4px 0;border-top:1px solid var(--install-line)}.workshop-app .installation-user>span{display:grid;width:34px;height:34px;place-items:center;border-radius:50%;background:var(--install-accent-soft);color:var(--install-accent);font-size:13px;font-weight:800}.workshop-app .installation-user div{display:grid;min-width:0;gap:3px}.workshop-app .installation-user b{overflow:hidden;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.workshop-app .installation-user small{color:var(--install-muted);font-size:10px}.workshop-app .installation-logout{padding:8px 10px;border:0;border-radius:7px;background:var(--install-dark);color:white;font-size:11px;font-weight:700;cursor:pointer}.workshop-app .installation-logout:hover{background:var(--install-dark-soft)}
-.workshop-app .installation-main{min-height:100vh;margin-left:250px;padding:0 var(--install-gutter) 48px}.workshop-app .installation-main-inner{width:min(1280px,100%);margin:0 auto}.workshop-app .installation-mobile-header{display:none}.workshop-app .module-navbar{position:sticky;top:0;z-index:15;display:flex;min-height:52px;align-items:center;justify-content:space-between;gap:16px;margin:0 calc(-1 * var(--install-gutter)) 26px;padding:0 var(--install-gutter);border-bottom:1px solid var(--nav-line);background:var(--nav-bg);color:var(--nav-ink)}.workshop-app .module-navbar-caption{color:var(--nav-muted);font-size:9px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;white-space:nowrap}.workshop-app .module-navbar-options{display:flex;flex-wrap:wrap;gap:6px}.workshop-app .module-navbar-link{display:inline-flex;min-height:34px;align-items:center;gap:7px;padding:0 12px;border:1px solid transparent;border-radius:8px;color:var(--nav-muted);font-size:11px;font-weight:700;text-decoration:none}.workshop-app .module-navbar-link:hover{background:var(--nav-hover);color:var(--nav-ink)}.workshop-app .module-navbar-icon{display:grid;width:19px;height:19px;place-items:center;border-radius:6px;background:#ffffff1f;color:var(--nav-muted);font-size:10px;font-weight:800}.workshop-app .module-navbar-link.active{background:var(--install-accent);color:white}
-.workshop-app .installation-page{padding:0}.workshop-app .installation-page-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:24px}.workshop-app .installation-eyebrow{color:var(--install-accent);font-size:9px;font-weight:800;letter-spacing:1.2px}.workshop-app .installation-page-heading h1{margin:7px 0 5px;color:var(--install-ink);font-size:29px;letter-spacing:-.8px}.workshop-app .installation-page-heading p{margin:0;color:var(--install-muted);font-size:12px}.workshop-app .installation-alert{margin:0 0 17px;padding:12px 14px;border:1px solid var(--install-accent-soft);border-radius:9px;background:var(--install-accent-soft);color:var(--install-accent-deep);font-size:12px}.workshop-app .installation-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.workshop-app .installation-metric{position:relative;display:grid;min-height:142px;align-content:start;gap:8px;padding:19px;border:1px solid var(--install-line);border-radius:10px;background:var(--install-surface);box-shadow:0 2px 8px #18271c08}.workshop-app .installation-metric-label{color:var(--install-muted);font-size:11px;font-weight:650}.workshop-app .installation-metric b{margin-top:7px;color:var(--install-ink);font-size:27px;letter-spacing:-.7px}.workshop-app .installation-metric small{color:var(--install-muted);font-size:10px}
-@media(max-width:900px){.workshop-app{--install-gutter:24px}.workshop-app .installation-sidebar{width:210px}.workshop-app .installation-main{margin-left:210px}.workshop-app .installation-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:700px){.workshop-app{--install-gutter:15px}.workshop-app .installation-sidebar{display:none}.workshop-app .installation-mobile-header{display:flex;min-height:64px;align-items:center;justify-content:space-between;padding:9px var(--install-gutter);border-bottom:1px solid var(--install-line);background:var(--install-surface)}.workshop-app .installation-mobile-header .installation-logo{width:37px;height:37px}.workshop-app .installation-main{min-height:calc(100vh - 64px);margin-left:0;padding-bottom:38px}.workshop-app .module-navbar{min-height:46px;margin-bottom:20px}.workshop-app .module-navbar-caption{display:none}.workshop-app .installation-page-heading{align-items:flex-start;flex-direction:column;gap:12px;margin-bottom:20px}.workshop-app .installation-page-heading h1{font-size:25px}.workshop-app .installation-metrics{grid-template-columns:1fr}}
+﻿/* Módulo de taller: tema, navegación y distribución */
 
-.workshop-app .installation-primary-link{display:inline-flex;min-height:40px;align-items:center;justify-content:center;gap:8px;padding:0 14px;border:0;border-radius:8px;background:var(--install-accent);color:white;font-size:11px;font-weight:750;text-decoration:none;cursor:pointer}.workshop-app .installation-primary-link:hover{background:var(--install-accent-deep)}.workshop-app .installation-primary-link:disabled{opacity:.6;cursor:wait}
+.workshop-app {
+  --install-ink: #182826;
+  --install-muted: #687b77;
+  --install-line: #dce8e5;
+  --install-accent: #167a78;
+  --install-accent-deep: #105c5a;
+  --install-accent-ink: #fff;
+  --install-accent-soft: #e1f2ef;
+  --install-surface: #fff;
+  --install-bg: #f3f8f7;
+  --install-dark: #1d3533;
+  --install-dark-soft: #294542;
+  --install-danger: #a23d36;
+  --install-danger-soft: #fff0ec;
+  --install-success: #26735d;
+  --install-success-soft: #eaf5ef;
+  --install-gutter: clamp(16px, 3.2vw, 43px);
+  --install-top: 24px;
+  min-height: 100vh;
+  background: var(--install-bg);
+  color: var(--install-ink);
+}
+
+/* Barra lateral */
+.workshop-app .installation-sidebar { position: fixed; inset: 0 auto 0 0; z-index: 20; display: flex; width: 250px; flex-direction: column; padding: 25px 17px 18px; border-right: 1px solid var(--install-line); background: var(--install-surface) }
+.workshop-app .installation-brand-lockup { display: flex; align-items: center; gap: 11px; padding: 0 8px; color: var(--install-ink); text-decoration: none }
+.workshop-app .installation-logo { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 12px; background: var(--install-accent); color: white; font-size: 22px; font-weight: 800 }
+.workshop-app .installation-brand-lockup>span:last-child { display: grid; gap: 2px }
+.workshop-app .installation-brand-lockup b { font-size: 14px }
+.workshop-app .installation-brand-lockup small { color: var(--install-muted); font-size: 9px; font-weight: 800; letter-spacing: 1.3px }
+.workshop-app .installation-nav-label { margin: 31px 9px 10px; color: var(--install-muted); font-size: 9px; font-weight: 800; letter-spacing: 1.2px }
+.workshop-app .installation-nav { display: grid; gap: 5px }
+.workshop-app .installation-nav a { display: flex; min-height: 42px; align-items: center; gap: 11px; padding: 0 11px; border-radius: 8px; color: var(--install-ink); font-size: 12px; font-weight: 650; text-decoration: none }
+.workshop-app .installation-nav a:hover, .workshop-app .installation-nav a[aria-current=page] { background: var(--install-accent-soft); color: var(--install-accent-deep) }
+.workshop-app .installation-nav a span { display: grid; width: 22px; height: 22px; place-items: center; border-radius: 7px; background: var(--install-accent-soft); color: var(--install-accent-deep) }
+.workshop-app .installation-sidebar-bottom { display: grid; gap: 13px; margin-top: auto }
+.workshop-app .installation-user { display: flex; align-items: center; gap: 10px; padding: 10px 4px 0; border-top: 1px solid var(--install-line) }
+.workshop-app .installation-user>span { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 50%; background: var(--install-accent-soft); color: var(--install-accent); font-size: 13px; font-weight: 800 }
+.workshop-app .installation-user div { display: grid; min-width: 0; gap: 3px }
+.workshop-app .installation-user b { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap }
+.workshop-app .installation-user small { color: var(--install-muted); font-size: 10px }
+.workshop-app .installation-logout { padding: 8px 10px; border: 0; border-radius: 7px; background: var(--install-dark); color: white; font-size: 11px; font-weight: 700; cursor: pointer }
+.workshop-app .installation-logout:hover { background: var(--install-dark-soft) }
+
+/* Contenido y navegación del módulo */
+.workshop-app .installation-main { min-height: 100vh; margin-left: 250px; padding: var(--install-top) var(--install-gutter) 56px }
+.workshop-app .installation-main-inner { width: min(1280px, 100%); margin: 0 auto }
+.workshop-app .installation-mobile-header { display: none }
+.workshop-app .module-navbar { position: sticky; top: 0; z-index: 15; display: flex; min-height: 52px; align-items: center; justify-content: space-between; gap: 16px; margin: 0 calc(-1 * var(--install-gutter)) 28px; padding: 0 var(--install-gutter); border-bottom: 1px solid var(--nav-line); background: var(--nav-bg); color: var(--nav-ink) }
+.workshop-app .module-navbar-caption { color: var(--nav-muted); font-size: 9px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; white-space: nowrap }
+.workshop-app .module-navbar-options { display: flex; flex-wrap: wrap; gap: 6px }
+.workshop-app .module-navbar-link { display: inline-flex; min-height: 34px; align-items: center; gap: 7px; padding: 0 12px; border: 1px solid transparent; border-radius: 8px; color: var(--nav-muted); font-size: 11px; font-weight: 700; text-decoration: none }
+.workshop-app .module-navbar-link:hover { background: var(--nav-hover); color: var(--nav-ink) }
+.workshop-app .module-navbar-icon { display: grid; width: 19px; height: 19px; place-items: center; border-radius: 6px; background: #ffffff1f; color: var(--nav-muted); font-size: 10px; font-weight: 800 }
+.workshop-app .module-navbar-link.active { background: var(--install-accent); color: white }
+
+/* Cabecera, avisos e indicadores */
+.workshop-app .installation-page { padding: 0 }
+.workshop-app .installation-page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 0 }
+.workshop-app .installation-eyebrow { color: var(--install-accent); font-size: 10px; font-weight: 800; letter-spacing: 1.2px }
+.workshop-app .installation-page-heading h1 { margin: 9px 0 7px; color: var(--install-ink); font-size: 32px; letter-spacing: -.8px }
+.workshop-app .installation-page-heading p { margin: 0; color: var(--install-muted); font-size: 13px; line-height: 1.5 }
+.workshop-app .installation-alert { margin: 0; padding: 14px 16px; border: 1px solid var(--install-accent-soft); border-radius: 10px; background: var(--install-accent-soft); color: var(--install-accent-deep); font-size: 13px; line-height: 1.5 }
+
+/* Botones y contenedores */
+.workshop-app .installation-primary-link { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 8px; padding: 0 18px; border: 0; border-radius: 9px; background: var(--install-accent); color: white; font-size: 12px; font-weight: 750; text-decoration: none; cursor: pointer }
+.workshop-app .installation-primary-link:hover { background: var(--install-accent-deep) }
+.workshop-app .installation-primary-link:disabled, .workshop-app button:disabled { opacity: .55; cursor: wait }
+.workshop-app .workshop-page { display: grid; gap: 24px }
+.workshop-app .workshop-summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px }
+.workshop-app .workshop-summary-card { display: grid; min-width: 0; gap: 7px; padding: 19px; border: 1px solid var(--install-line); border-radius: 11px; background: var(--install-surface); color: var(--install-ink); text-align: left; cursor: pointer; box-shadow: 0 2px 8px #18271c08 }
+.workshop-app .workshop-summary-card:hover { border-color: var(--install-accent); transform: translateY(-1px) }
+.workshop-app .workshop-summary-card span { color: var(--install-muted); font-size: 11px; font-weight: 700 }
+.workshop-app .workshop-summary-card b { font-size: 27px; letter-spacing: -.5px }
+.workshop-app .workshop-summary-card small { color: var(--install-muted); font-size: 10px }
+.workshop-app .workshop-summary-revenue b { color: var(--install-accent-deep) }
+.workshop-app .workshop-heading-actions { display: flex; gap: 10px; flex-wrap: wrap }
+.workshop-app .workshop-secondary { min-height: 42px; padding: 0 14px; border: 1px solid var(--install-line); border-radius: 9px; background: var(--install-surface); color: var(--install-ink); font-size: 12px; font-weight: 700; cursor: pointer }
+.workshop-app .workshop-secondary:hover { border-color: var(--install-accent); color: var(--install-accent-deep) }
+.workshop-app .workshop-error { border-color: #f2c9c4; background: var(--install-danger-soft); color: var(--install-danger) }
+.workshop-app .workshop-panel, .workshop-app .workshop-order { min-width: 0; border: 1px solid var(--install-line); border-radius: 12px; background: var(--install-surface); box-shadow: 0 2px 8px #18271c08 }
+.workshop-app .workshop-panel { padding: 24px }
+.workshop-app .workshop-panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px }
+.workshop-app .workshop-panel-heading h2 { margin: 7px 0; color: var(--install-ink); font-size: 19px }
+.workshop-app .workshop-panel-heading p { margin: 0; color: var(--install-muted); font-size: 12px; line-height: 1.5 }
+
+/* Formularios */
+.workshop-app .workshop-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px }
+.workshop-app .workshop-fields label, .workshop-app .workshop-toolbar label, .workshop-app .workshop-detail-grid label { display: grid; min-width: 0; gap: 8px; color: var(--install-muted); font-size: 12px; font-weight: 700 }
+.workshop-app .workshop-fields input, .workshop-app .workshop-fields select, .workshop-app .workshop-fields textarea, .workshop-app .workshop-toolbar input, .workshop-app .workshop-toolbar select, .workshop-app .workshop-detail-grid input, .workshop-app .workshop-detail-grid select, .workshop-app .workshop-detail-grid textarea { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--install-line); border-radius: 8px; background: #fff; color: var(--install-ink); font: inherit; font-size: 13px; outline: none }
+.workshop-app .workshop-fields textarea, .workshop-app .workshop-detail-grid textarea { resize: vertical }
+.workshop-app .workshop-fields input:focus, .workshop-app .workshop-fields select:focus, .workshop-app .workshop-fields textarea:focus, .workshop-app .workshop-toolbar input:focus, .workshop-app .workshop-toolbar select:focus, .workshop-app .workshop-detail-grid input:focus, .workshop-app .workshop-detail-grid select:focus, .workshop-app .workshop-detail-grid textarea:focus { border-color: var(--install-accent); box-shadow: 0 0 0 3px #167a781a }
+.workshop-app .workshop-span { grid-column: 1 / -1 }
+.workshop-app .workshop-actions { display: flex; justify-content: flex-end; margin-top: 20px }
+.workshop-app .workshop-toolbar { display: grid; grid-template-columns: minmax(220px, 1.2fr) minmax(160px, .6fr) auto; align-items: end; gap: 14px }
+.workshop-app .workshop-list { display: grid; gap: 20px }
+
+/* Tarjeta de orden: solo los cuatro datos de seguimiento */
+.workshop-app .workshop-order { overflow: hidden }
+.workshop-app .workshop-order-top { display: flex; justify-content: space-between; gap: 20px; padding: 24px 24px 20px }
+.workshop-app .workshop-order-number { color: var(--install-accent); font-size: 10px; font-weight: 800; letter-spacing: 1px }
+.workshop-app .workshop-order-top h2 { margin: 7px 0; color: var(--install-ink); font-size: 19px; line-height: 1.35 }
+.workshop-app .workshop-order-top p { margin: 0; color: var(--install-muted); font-size: 12px; line-height: 1.5 }
+.workshop-app .workshop-badge { align-self: flex-start; padding: 8px 12px; border-radius: 999px; background: var(--install-accent-soft); color: var(--install-accent-deep); font-size: 10px; font-weight: 800; white-space: nowrap }
+.workshop-app .status-entregado { background: var(--install-success-soft); color: var(--install-success) }
+.workshop-app .status-cancelado, .workshop-app .status-no_reparable { background: var(--install-danger-soft); color: var(--install-danger) }
+.workshop-app .workshop-order-summary { display: grid; grid-template-columns: minmax(130px, .7fr) minmax(220px, 2fr) minmax(120px, .6fr); gap: 18px; padding: 18px 24px; border-top: 1px solid var(--install-line); border-bottom: 1px solid var(--install-line) }
+.workshop-app .workshop-order-summary div { display: grid; align-content: start; gap: 7px; min-width: 0 }
+.workshop-app .workshop-order-summary small { color: var(--install-muted); font-size: 10px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase }
+.workshop-app .workshop-order-summary b { font-size: 12px; line-height: 1.5; overflow-wrap: anywhere }
+.workshop-app .workshop-order-body { padding: 20px 24px 24px }
+.workshop-app .workshop-section-title { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 18px }
+.workshop-app .workshop-section-title>span { display: grid; width: 28px; height: 28px; flex: none; place-items: center; border-radius: 8px; background: var(--install-accent-soft); color: var(--install-accent-deep); font-size: 11px; font-weight: 800 }
+.workshop-app .workshop-section-title h3 { margin: 1px 0 4px; color: var(--install-ink); font-size: 14px }
+.workshop-app .workshop-section-title p { margin: 0; color: var(--install-muted); font-size: 12px; line-height: 1.5 }
+.workshop-app .workshop-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px }
+.workshop-app .workshop-detail-grid--simple label:nth-child(-n+2) { grid-column: span 2 }
+.workshop-app .workshop-empty { display: grid; gap: 10px; padding: 36px; border: 1px dashed var(--install-line); border-radius: 12px; color: var(--install-muted); font-size: 12px; text-align: center }
+.workshop-app .workshop-empty b { color: var(--install-ink) }
+
+/* Orden de recepción: solo existe para imprimir al guardar */
+.workshop-app .workshop-print-receipt { display: none }
+.workshop-app .print-receipt-head { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 2px solid #167a78 }
+.workshop-app .print-receipt-logo { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 9px; background: #167a78; color: #fff; font-size: 17px; font-weight: 800 }
+.workshop-app .print-receipt-head>div { display: grid; gap: 2px }
+.workshop-app .print-receipt-head b { font-size: 15px }
+.workshop-app .print-receipt-head small { color: #687b77; font-size: 8px; font-weight: 800; letter-spacing: 1.1px }
+.workshop-app .print-receipt-number { margin-left: auto; color: #105c5a; font-size: 12px; font-weight: 800 }
+.workshop-app .workshop-print-receipt h1 { margin: 20px 0 4px; color: #182826; font-size: 23px }
+.workshop-app .print-receipt-date { margin: 0 0 18px; color: #687b77; font-size: 11px }
+.workshop-app .print-receipt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px }
+.workshop-app .print-receipt-grid>div { display: grid; gap: 3px; padding-bottom: 8px; border-bottom: 1px solid #dce8e5 }
+.workshop-app .print-receipt-grid small { color: #687b77; font-size: 9px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase }
+.workshop-app .print-receipt-grid b { color: #182826; font-size: 12px; font-weight: 650; line-height: 1.45; overflow-wrap: anywhere }
+.workshop-app .workshop-print-receipt footer { margin-top: 24px; padding-top: 10px; border-top: 1px solid #dce8e5; color: #687b77; font-size: 10px }
+
+/* Pantallas medianas */
+@media (max-width: 1050px) {
+  .workshop-app .workshop-toolbar { grid-template-columns: minmax(180px, 1fr) minmax(140px, .6fr) auto }
+  .workshop-app .workshop-order-summary { grid-template-columns: 1fr 2fr 1fr }
+}
+
+/* Móvil */
+@media (max-width: 700px) {
+  .workshop-app { --install-gutter: 18px; --install-top: 16px }
+  .workshop-app .installation-sidebar { display: none }
+  .workshop-app .installation-mobile-header { display: flex; min-height: 64px; align-items: center; justify-content: space-between; padding: 9px var(--install-gutter); border-bottom: 1px solid var(--install-line); background: var(--install-surface) }
+  .workshop-app .installation-mobile-header .installation-logo { width: 37px; height: 37px }
+  .workshop-app .installation-main { min-height: calc(100vh - 64px); margin-left: 0; padding-bottom: 44px }
+  .workshop-app .module-navbar { min-height: 46px; margin-bottom: 22px }
+  .workshop-app .module-navbar-caption { display: none }
+  .workshop-app .installation-page-heading { align-items: flex-start; flex-direction: column; gap: 16px }
+  .workshop-app .installation-page-heading h1 { font-size: 26px }
+  .workshop-app .workshop-page { gap: 20px }
+  .workshop-app .workshop-summary { grid-template-columns: 1fr }
+  .workshop-app .workshop-summary-card { padding: 15px }
+  .workshop-app .workshop-summary-card b { font-size: 24px }
+  .workshop-app .workshop-heading-actions { width: 100% }
+  .workshop-app .workshop-toolbar { grid-template-columns: 1fr 1fr; gap: 12px }
+  .workshop-app .workshop-toolbar label:first-child { grid-column: 1 / -1 }
+  .workshop-app .workshop-toolbar button { width: 100% }
+  .workshop-app .workshop-fields { grid-template-columns: 1fr }
+  .workshop-app .workshop-span { grid-column: auto }
+  .workshop-app .workshop-panel { padding: 18px }
+  .workshop-app .workshop-order-top { flex-direction: column; gap: 14px; padding: 18px }
+  .workshop-app .workshop-order-top h2 { font-size: 17px }
+  .workshop-app .workshop-order-summary { grid-template-columns: 1fr; gap: 14px; padding: 16px 18px }
+  .workshop-app .workshop-order-body { padding: 18px }
+  .workshop-app .workshop-detail-grid { grid-template-columns: 1fr }
+  .workshop-app .workshop-detail-grid--simple label:nth-child(-n+2) { grid-column: auto }
+  .workshop-app .workshop-actions { justify-content: stretch }
+  .workshop-app .workshop-actions button { width: 100% }
+  .workshop-app .print-receipt-grid { grid-template-columns: 1fr }
+}
+
+/* Impresión: únicamente la orden de recepción generada al guardar */
+@media print {
+  @page { size: letter; margin: 14mm; }
+  body * { visibility: hidden !important; }
+  .workshop-app .workshop-print-receipt, .workshop-app .workshop-print-receipt * { visibility: visible !important; }
+  .workshop-app .workshop-print-receipt { display: block !important; position: absolute; top: 0; left: 0; width: 100%; padding: 0; background: #fff }
+}
