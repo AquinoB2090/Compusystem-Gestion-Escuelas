@@ -5,7 +5,7 @@ export default async function SalidasPage() {
   const { supabase } = await requireInstallationRole();
   const { data, error } = await supabase
     .from('instalaciones_salidas')
-    .select('id,lugar,fecha_inicio,fecha_fin,trabajo_realizado,cobrado,invertido,ganancia,creado_en')
+    .select('id,lugar,fecha_inicio,fecha_fin,trabajo_realizado,cobrado,invertido,factura,descuento_factura,ganancia,estado,creado_en,creado_por')
     .order('fecha_inicio', { ascending: false })
     .order('id', { ascending: false });
 
