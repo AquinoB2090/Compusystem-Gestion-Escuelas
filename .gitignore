@@ -8,3 +8,4 @@ supabase/functions/.env
 .credenciales-acceso.local.md
 out/
 *.tsbuildinfo
+.vercel
