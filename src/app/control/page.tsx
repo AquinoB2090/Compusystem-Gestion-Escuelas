@@ -24,10 +24,14 @@ export default async function ControlPage() {
   if (!profile || profile.rol !== 'admin') redirect('/');
 
   const period = guatemalaMonth();
-  const [schools, teachers, schoolActivity, openOutings, outings, openOrders, workshopOrders, deliveredOrders] = await Promise.all([
+  const [schools, teachers, schoolActivity, clients, clientMovements, clientPayments, monthlyClientPayments, openOutings, outings, openOrders, workshopOrders, deliveredOrders] = await Promise.all([
     supabase.from('escuelas').select('id', { count: 'exact', head: true }).eq('activa', true),
     supabase.from('maestros').select('id', { count: 'exact', head: true }).eq('activo', true),
     supabase.from('consumos').select('monto').eq('anulado', false).gte('fecha', period.dateStart).lt('fecha', period.dateEnd),
+    supabase.from('clientes_individuales').select('id').eq('activo', true),
+    supabase.from('consumos_clientes').select('cliente_id,cantidad,unidad'),
+    supabase.from('liquidaciones_clientes').select('cliente_id,monto'),
+    supabase.from('liquidaciones_clientes').select('monto').gte('fecha', period.dateStart).lt('fecha', period.dateEnd),
     supabase.from('instalaciones_salidas').select('id', { count: 'exact', head: true }).eq('estado', 'activa'),
     supabase.from('instalaciones_salidas').select('cobrado,invertido,ganancia').eq('estado', 'finalizada').gte('fecha_fin', period.start).lt('fecha_fin', period.end),
     supabase.from('taller_ordenes').select('id', { count: 'exact', head: true }).not('estado', 'in', '(entregado,cancelado)'),
@@ -36,12 +40,26 @@ export default async function ControlPage() {
   ]);
 
   const monthLabel = new Intl.DateTimeFormat('es-GT', { month: 'long', year: 'numeric', timeZone: 'America/Guatemala' }).format(new Date(`${period.dateStart}T12:00:00-06:00`));
-  const schoolError = Boolean(schools.error || teachers.error || schoolActivity.error);
+  const schoolError = Boolean(schools.error || teachers.error || schoolActivity.error || clients.error || clientMovements.error || clientPayments.error || monthlyClientPayments.error);
   const installationsError = Boolean(openOutings.error || outings.error);
   const workshopError = Boolean(openOrders.error || workshopOrders.error || deliveredOrders.error);
   const collected = sum(outings.data as Array<Record<string, unknown>> | null, 'cobrado');
   const profit = sum(outings.data as Array<Record<string, unknown>> | null, 'ganancia');
   const workshopCollected = sum(workshopOrders.data as Array<Record<string, unknown>> | null, 'monto_cobrado');
+  const schoolCollected = sum(monthlyClientPayments.data as Array<Record<string, unknown>> | null, 'monto');
+  const clientIds = (clients.data ?? []).map((client) => client.id);
+  const clientDebtById = new Map<number, number>(clientIds.map((id) => [id, 0]));
+  for (const movement of clientMovements.data ?? []) {
+    if (!clientDebtById.has(movement.cliente_id)) continue;
+    const amount = movement.unidad === 'fotocopias' ? Number(movement.cantidad) / 4 : Number(movement.cantidad);
+    clientDebtById.set(movement.cliente_id, clientDebtById.get(movement.cliente_id)! + amount);
+  }
+  for (const payment of clientPayments.data ?? []) {
+    if (!clientDebtById.has(payment.cliente_id)) continue;
+    clientDebtById.set(payment.cliente_id, clientDebtById.get(payment.cliente_id)! - Number(payment.monto));
+  }
+  const clientsWithDebt = [...clientDebtById.values()].filter((balance) => balance > 0).length;
+  const pendingClientDebt = [...clientDebtById.values()].reduce((total, balance) => total + Math.max(0, balance), 0);
 
   return <div className="control-app">
     <ModuleNavbar active="control" available={['escuela', 'instalaciones', 'taller', 'control']} />
@@ -56,7 +74,8 @@ export default async function ControlPage() {
           <h2>Gestión escolar</h2>
           {schoolError ? <p className="control-error">No se pudieron cargar todos los indicadores.</p> : <>
             <div className="control-stats"><div><b>{schools.count ?? 0}</b><span>Escuelas activas</span></div><div><b>{teachers.count ?? 0}</b><span>Maestros activos</span></div></div>
-            <div className="control-foot"><span>Consumo registrado este mes</span><strong>{money(sum(schoolActivity.data as Array<Record<string, unknown>> | null, 'monto'))}</strong></div>
+            <div className="control-foot"><span>Consumo del mes</span><strong>{money(sum(schoolActivity.data as Array<Record<string, unknown>> | null, 'monto'))}</strong></div>
+            <div className="control-client-debt"><span>Saldo por cobrar</span><strong>{money(pendingClientDebt)}</strong><small>{clientsWithDebt} clientes con saldo</small></div>
           </>}
         </article>
         <article className="control-card control-installations">
@@ -76,6 +95,10 @@ export default async function ControlPage() {
             <div className="control-foot"><span>Cobrado en órdenes recibidas este mes</span><strong>{money(workshopCollected)}</strong></div>
           </>}
         </article>
+      </section>
+      <section className="control-income" aria-label="Ingresos totales del mes">
+        <div><span className="control-eyebrow">INGRESOS DEL MES</span><h2>Total recibido en los tres módulos</h2><p>Liquidaciones de clientes, cobros de Instalaciones y cobros del Taller.</p></div>
+        <strong>{money(schoolCollected + collected + workshopCollected)}</strong>
       </section>
       <p className="control-note">Los indicadores financieros agrupan los registros del mes por fecha de finalización en Instalaciones y fecha de recepción en Taller.</p>
     </main>
