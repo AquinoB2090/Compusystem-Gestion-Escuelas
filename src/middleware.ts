@@ -45,7 +45,7 @@ export async function middleware(request: NextRequest) {
     const inInstallations = pathname === '/instalaciones' || pathname.startsWith('/instalaciones/');
     const inWorkshop = pathname === '/taller' || pathname.startsWith('/taller/') || pathname.startsWith('/api/taller');
     const isSignout = pathname === '/auth/signout';
-    const allowedSalesRoute = pathname === '/instalaciones' || pathname === '/instalaciones/precios' || pathname === '/instalaciones/cotizaciones' || pathname === '/taller' || pathname.startsWith('/api/taller');
+    const allowedSalesRoute = pathname === '/instalaciones' || pathname === '/instalaciones/precios' || pathname === '/instalaciones/cotizaciones' || pathname === '/instalaciones/salidas' || pathname === '/taller' || pathname.startsWith('/api/taller');
     if (profile.rol === 'ventas' && !inInstallations && !inWorkshop && !isSignout) return redirect('/instalaciones');
     if (profile.rol === 'ventas' && inInstallations && !allowedSalesRoute) return redirect('/instalaciones');
     if (inInstallations && profile.rol !== 'admin' && profile.rol !== 'ventas') return redirect('/');
