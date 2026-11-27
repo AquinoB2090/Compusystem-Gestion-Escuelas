@@ -1,8 +1,8 @@
 begin;
 
 alter table public.instalaciones_salidas
-  alter column fecha_inicio type timestamptz using fecha_inicio::timestamptz,
-  alter column fecha_fin type timestamptz using fecha_fin::timestamptz,
+  alter column fecha_inicio type timestamptz using (fecha_inicio::timestamp at time zone 'America/Guatemala'),
+  alter column fecha_fin type timestamptz using (fecha_fin::timestamp at time zone 'America/Guatemala'),
   alter column fecha_fin drop not null,
   alter column trabajo_realizado drop not null,
   alter column cobrado drop not null,
