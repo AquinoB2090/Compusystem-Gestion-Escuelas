@@ -22,7 +22,7 @@
 .control-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;padding-top:15px}
 .control-foot strong{color:#1c2c40;font-size:13px}
 .control-foot-secondary{padding-top:9px}
-.control-client-debt{display:grid;grid-template-columns:1fr auto;align-items:center;gap:3px 10px;margin-top:14px;padding:12px;border-radius:9px;background:#f5f7fa}.control-client-debt span{color:#6b7a8d;font-size:10px}.control-client-debt strong{grid-column:2;grid-row:1/3;color:#1c2c40;font-size:15px}.control-client-debt small{color:#7b8796;font-size:9px}
+.control-client-debt{display:grid;grid-template-columns:1fr auto;align-items:center;gap:3px 10px;margin-top:14px;padding:12px;border-radius:9px;background:#f5f7fa}.control-client-debt span{color:#6b7a8d;font-size:10px}.control-client-debt strong,.control-client-debt b{grid-column:2;color:#1c2c40;font-size:13px;text-align:right}.control-client-debt strong{grid-row:1/3;font-size:15px}.control-client-debt small{color:#7b8796;font-size:9px}
 .control-income{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-top:18px;padding:20px 23px;border:1px solid #dfe6ef;border-radius:14px;background:#fff}.control-income h2{margin:5px 0;color:#1c2c40;font-size:16px}.control-income p{margin:0;color:#6b7a8d;font-size:10px}.control-income>strong{color:#176b58;font-size:27px;letter-spacing:-.6px;white-space:nowrap}
 .control-error{padding:13px;border-radius:8px;background:#fff2f0;color:#aa3b32;font-size:12px;line-height:1.5}
 .control-note{margin:18px 1px 0;color:#7b8796;font-size:10px;line-height:1.5}

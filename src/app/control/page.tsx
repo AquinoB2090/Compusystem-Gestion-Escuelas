@@ -47,6 +47,7 @@ export default async function ControlPage() {
   const profit = sum(outings.data as Array<Record<string, unknown>> | null, 'ganancia');
   const workshopCollected = sum(workshopOrders.data as Array<Record<string, unknown>> | null, 'monto_cobrado');
   const schoolCollected = sum(monthlyClientPayments.data as Array<Record<string, unknown>> | null, 'monto');
+  const schoolConsumption = sum(schoolActivity.data as Array<Record<string, unknown>> | null, 'monto');
   const clientIds = (clients.data ?? []).map((client) => client.id);
   const clientDebtById = new Map<number, number>(clientIds.map((id) => [id, 0]));
   for (const movement of clientMovements.data ?? []) {
@@ -70,12 +71,19 @@ export default async function ControlPage() {
       </header>
       <section className="control-grid" aria-label="Indicadores por módulo">
         <article className="control-card control-school">
-          <div className="control-card-top"><span className="control-icon">▦</span><span className="control-module">ESCUELA</span><a href="/">Abrir módulo <span aria-hidden="true">↗</span></a></div>
-          <h2>Gestión escolar</h2>
+          <div className="control-card-top"><span className="control-icon">▦</span><span className="control-module">LIBRERÍA</span><a href="/">Abrir módulo <span aria-hidden="true">↗</span></a></div>
+          <h2>Escuelas y maestros</h2>
           {schoolError ? <p className="control-error">No se pudieron cargar todos los indicadores.</p> : <>
             <div className="control-stats"><div><b>{schools.count ?? 0}</b><span>Escuelas activas</span></div><div><b>{teachers.count ?? 0}</b><span>Maestros activos</span></div></div>
-            <div className="control-foot"><span>Consumo del mes</span><strong>{money(sum(schoolActivity.data as Array<Record<string, unknown>> | null, 'monto'))}</strong></div>
-            <div className="control-client-debt"><span>Saldo por cobrar</span><strong>{money(pendingClientDebt)}</strong><small>{clientsWithDebt} clientes con saldo</small></div>
+            <div className="control-foot"><span>Consumo del mes</span><strong>{money(schoolConsumption)}</strong></div>
+          </>}
+        </article>
+        <article className="control-card control-clients">
+          <div className="control-card-top"><span className="control-icon">Q</span><span className="control-module">CLIENTES INDIVIDUALES</span><a href="/instalaciones">Ver resumen <span aria-hidden="true">↗</span></a></div>
+          <h2>Saldo de clientes</h2>
+          {schoolError ? <p className="control-error">No se pudieron cargar todos los indicadores.</p> : <>
+            <div className="control-client-debt"><span>Pendiente por cobrar</span><strong>{money(pendingClientDebt)}</strong><small>{clientsWithDebt} clientes con saldo</small></div>
+            <div className="control-foot"><span>Liquidado este mes</span><strong>{money(schoolCollected)}</strong></div>
           </>}
         </article>
         <article className="control-card control-installations">
@@ -97,8 +105,8 @@ export default async function ControlPage() {
         </article>
       </section>
       <section className="control-income" aria-label="Ingresos totales del mes">
-        <div><span className="control-eyebrow">INGRESOS DEL MES</span><h2>Total recibido en los tres módulos</h2><p>Liquidaciones de clientes, cobros de Instalaciones y cobros del Taller.</p></div>
-        <strong>{money(schoolCollected + collected + workshopCollected)}</strong>
+        <div><span className="control-eyebrow">TOTAL DEL MES</span><h2>Suma de actividad de los tres módulos</h2><p>Consumo de escuelas, liquidaciones de clientes, ganancia de Instalaciones y cobros del Taller.</p></div>
+        <strong>{money(schoolConsumption + schoolCollected + profit + workshopCollected)}</strong>
       </section>
       <p className="control-note">Los indicadores financieros agrupan los registros del mes por fecha de finalización en Instalaciones y fecha de recepción en Taller.</p>
     </main>
