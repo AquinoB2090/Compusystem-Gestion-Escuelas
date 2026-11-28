@@ -1,5 +1,6 @@
 /// <reference lib="deno.ns" />
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { PDFDocument } from 'npm:pdf-lib@1.17.1';
 import { normalizarItems, type NormalizedPrice } from '../_shared/utils.ts';
 import {
   DEFAULT_GEMINI_MODELS,
@@ -18,6 +19,7 @@ const corsHeaders = {
 
 // Presupuestos por debajo del límite de 150s de una Edge Function (plan free).
 const TOTAL_GEMINI_BUDGET_MS = 95_000;
+const PDF_CHUNK_PAGES = 10;
 const MODEL_BUDGET_MS = 40_000;
 const ATTEMPT_TIMEOUT_MS = 18_000;
 const STALE_PROCESSING_MS = 10 * 60_000;
@@ -86,7 +88,7 @@ function hasCameraCountConflict(items: NormalizedPrice[]): boolean {
  * exponencial (y Retry-After/retryDelay cuando Gemini lo envía) y pasa al
  * siguiente modelo si la saturación persiste.
  */
-async function requestGemini(apiKey: string, models: string[], mime: string, bytes: Uint8Array, message: string | null, thinkingLevel: string): Promise<{ data: unknown; model: string }> {
+async function requestGemini(apiKey: string, models: string[], mime: string, bytes: Uint8Array, message: string | null, thinkingLevel: string, budgetMs = TOTAL_GEMINI_BUDGET_MS): Promise<{ data: unknown; model: string }> {
   const contents = [promptForExtraction(), message ? `Texto adicional del remitente: ${message}` : null].filter(Boolean).join('\n\n');
   const generationConfig: Record<string, unknown> = { responseMimeType: 'application/json' };
   if (THINKING_LEVELS.includes(thinkingLevel)) generationConfig.thinkingConfig = { thinkingLevel };
@@ -94,12 +96,12 @@ async function requestGemini(apiKey: string, models: string[], mime: string, byt
     contents: [{ parts: [{ text: contents }, { inline_data: { mime_type: mime, data: toBase64(bytes) } }] }],
     generationConfig,
   });
-  const deadline = Date.now() + TOTAL_GEMINI_BUDGET_MS;
+  const deadline = Date.now() + budgetMs;
   const failures: string[] = [];
 
   for (const model of models) {
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-    const modelDeadline = Math.min(deadline, Date.now() + MODEL_BUDGET_MS);
+    const modelDeadline = Math.min(deadline, Date.now() + Math.min(MODEL_BUDGET_MS, budgetMs));
     let attempt = 0;
 
     while (modelDeadline - Date.now() > 1_000) {
@@ -234,7 +236,33 @@ async function processDocument(admin: any, document: any, apiKey: string, models
     const geminiStartedAt = Date.now();
     console.info('Iniciando extracción Gemini.', { documentoId: document.id, mime: document.mime, modelos: models });
     const fileBytes = new Uint8Array(await file.arrayBuffer());
-    let { data: extracted, model } = await requestGemini(apiKey, models, document.mime, fileBytes, document.mensaje, thinkingLevel);
+    let extracted: unknown;
+    let model = '';
+    if (document.mime === 'application/pdf') {
+      const sourcePdf = await PDFDocument.load(fileBytes);
+      const pageCount = sourcePdf.getPageCount();
+      const chunkCount = Math.ceil(pageCount / PDF_CHUNK_PAGES);
+      const chunkBudgetMs = Math.floor(TOTAL_GEMINI_BUDGET_MS / chunkCount);
+      const allItems: unknown[] = [];
+      for (let start = 0; start < pageCount; start += PDF_CHUNK_PAGES) {
+        const chunkPdf = await PDFDocument.create();
+        const pageIndices = Array.from({ length: Math.min(PDF_CHUNK_PAGES, pageCount - start) }, (_, offset) => start + offset);
+        const pages = await chunkPdf.copyPages(sourcePdf, pageIndices);
+        for (const page of pages) chunkPdf.addPage(page);
+        const chunkBytes = new Uint8Array(await chunkPdf.save());
+        const chunkNumber = Math.floor(start / PDF_CHUNK_PAGES) + 1;
+        console.info('Procesando bloque PDF.', { documentoId: document.id, bloque: chunkNumber, bloques: chunkCount, paginas: pageIndices.length });
+        const result = await requestGemini(apiKey, models, document.mime, chunkBytes, document.mensaje, thinkingLevel, chunkBudgetMs);
+        const chunkItems = normalizarItems(result.data);
+        allItems.push(...chunkItems);
+        model = result.model;
+      }
+      extracted = { items: allItems };
+    } else {
+      const result = await requestGemini(apiKey, models, document.mime, fileBytes, document.mensaje, thinkingLevel);
+      extracted = result.data;
+      model = result.model;
+    }
     console.info('Extracción Gemini completada.', { documentoId: document.id, durationMs: Date.now() - geminiStartedAt, model });
 
     let items = normalizarItems(extracted);
